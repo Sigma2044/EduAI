@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edu AI - Modern Learning</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: #0f172a;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .chat-container {
+            height: calc(100vh - 180px);
+            scroll-behavior: smooth;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 20px; }
+
+        .message-animate {
+            animation: fadeInUp 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #34d399 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="text-slate-200 overflow-hidden">
+
+    <div class="flex h-screen w-full">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-[#0a0f1d] border-r border-slate-800 hidden md:flex flex-col p-4">
+            <div class="flex items-center gap-3 mb-8 px-2">
+                <div class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-blue-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                    <span class="text-white font-bold text-xl">E</span>
+                </div>
+                <h1 class="font-bold text-xl tracking-tight text-white">Edu <span class="text-emerald-400">AI</span></h1>
+            </div>
+
+            <button class="w-full py-3 px-4 rounded-xl border border-slate-700 hover:bg-slate-800 transition flex items-center gap-3 text-sm font-medium mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Neuer Chat
+            </button>
+
+            <div class="flex-1 overflow-y-auto custom-scrollbar">
+                <p class="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-4 px-2">Verlauf</p>
+                <div class="space-y-1">
+                    <div class="p-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-lg cursor-pointer transition truncate">Mathe Hausaufgaben</div>
+                    <div class="p-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-lg cursor-pointer transition truncate">Deutsch Analyse</div>
+                </div>
+            </div>
+
+            <div class="mt-auto pt-4 border-t border-slate-800">
+                <div class="flex items-center gap-3 p-2">
+                    <div class="w-8 h-8 rounded-full bg-slate-700"></div>
+                    <span class="text-sm font-medium">Schüler Modus</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col relative bg-[#0f172a]">
+            <!-- Header -->
+            <header class="h-16 flex items-center justify-between px-8 glass-panel sticky top-0 z-10">
+                <div class="flex items-center gap-4">
+                    <div class="md:hidden w-8 h-8 bg-emerald-500 rounded flex items-center justify-center font-bold">E</div>
+                    <h2 class="font-semibold text-slate-100">Aktueller Chat</h2>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-xs font-medium text-slate-400">Backend Online</span>
+                </div>
+            </header>
+
+            <!-- Chat Area -->
+            <div id="chatHistory" class="chat-container overflow-y-auto custom-scrollbar p-4 md:p-8">
+                <!-- Welcome Card -->
+                <div class="max-w-3xl mx-auto mb-12">
+                    <div class="glass-panel rounded-3xl p-8 text-center space-y-4">
+                        <div class="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white">Hallo! Ich bin <span class="gradient-text">Edu AI</span></h3>
+                        <p class="text-slate-400 max-w-md mx-auto">Dein intelligenter Begleiter für Schule und Studium. Frag mich alles zu Mathe, Geschichte oder Sprachen.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Section -->
+            <div class="p-4 md:p-8 bg-gradient-to-t from-[#0f172a] via-[#0f172a] to-transparent">
+                <div class="max-w-4xl mx-auto">
+                    <div class="glass-panel rounded-2xl p-2 flex items-end gap-2 shadow-2xl">
+                        <textarea id="userInput" rows="1" placeholder="Frag mich etwas..." 
+                            class="flex-1 bg-transparent border-none focus:ring-0 p-3 text-slate-100 placeholder-slate-500 resize-none max-h-40 custom-scrollbar"></textarea>
+                        
+                        <button onclick="sendMessage()" id="sendBtn" class="p-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95 disabled:opacity-50">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex justify-between items-center mt-3 px-2">
+                        <p class="text-[10px] text-slate-500 font-medium tracking-wide uppercase">Lern-Sicherheits-Modus Aktiv</p>
+                        <p class="text-[10px] text-slate-500">v2.0 Beta</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // KONFIGURATION: Hier deine Backend-IP eintragen
+        const BACKEND_URL = "http://DEINE-IP-ADRESSE:11434/api/generate";
+
+        const chatHistory = document.getElementById('chatHistory');
+        const userInput = document.getElementById('userInput');
+
+        function addMessage(text, role) {
+            const isAi = role === 'ai';
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `flex w-full mb-6 ${isAi ? 'justify-start' : 'justify-end'} message-animate`;
+            
+            const content = `
+                <div class="flex gap-3 max-w-[85%] ${isAi ? 'flex-row' : 'flex-row-reverse'}">
+                    <div class="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center font-bold text-[10px] ${isAi ? 'bg-emerald-500 text-white' : 'bg-blue-600 text-white'}">
+                        ${isAi ? 'AI' : 'ICH'}
+                    </div>
+                    <div class="p-4 rounded-2xl ${isAi ? 'glass-panel text-slate-100 rounded-tl-none' : 'bg-blue-600 text-white rounded-tr-none shadow-lg shadow-blue-500/10'}">
+                        <p class="text-sm leading-relaxed whitespace-pre-wrap">${text}</p>
+                    </div>
+                </div>
+            `;
+            
+            messageWrapper.innerHTML = content;
+            chatHistory.appendChild(messageWrapper);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            userInput.value = '';
+            userInput.style.height = 'auto';
+
+            // Loading bubble
+            addMessage("Ich denke nach...", 'ai');
+            const lastMessageDiv = chatHistory.lastElementChild.querySelector('p');
+
+            try {
+                const response = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: "llama3", 
+                        prompt: text,
+                        stream: false
+                    })
+                });
+
+                if (!response.ok) throw new Error("Backend offline");
+
+                const data = await response.json();
+                const aiText = data.response || data.choices?.[0]?.message?.content || data.text || "Fehler beim Lesen der Antwort.";
+                
+                lastMessageDiv.innerText = aiText;
+
+            } catch (error) {
+                lastMessageDiv.innerHTML = `<span class="text-rose-400 font-semibold">Verbindungsproblem:</span> Dein lokaler KI-Server ist nicht erreichbar.`;
+                console.error("API Error:", error);
+            }
+        }
+
+        userInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
