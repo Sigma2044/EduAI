@@ -72,7 +72,7 @@ async function askOpenRouter(userMessage) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "mistralai/mistral-small",
+      model: "mistralai/mistral-small-3.1-24b-instruct:free",
       messages: [
         { role: "user", content: userMessage }
       ]
