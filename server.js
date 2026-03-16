@@ -13,10 +13,26 @@ const upload = multer({ dest: "uploads/" });
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 
 /* -----------------------------------------
-   CHAT — Nur Mistral
+   Unified Chat + Vision (mistral-small-2506)
 ------------------------------------------ */
-app.post("/chat", async (req, res) => {
+app.post("/chat", upload.single("image"), async (req, res) => {
   const { message } = req.body;
+
+  // Basis: Text
+  let content = [{ type: "text", text: message }];
+
+  // Falls ein Bild hochgeladen wurde → hinzufügen
+  if (req.file) {
+    try {
+      const file = fs.readFileSync(req.file.path, { encoding: "base64" });
+      content.push({
+        type: "image_base64",
+        image_base64: file
+      });
+    } catch (err) {
+      console.log("❌ Fehler beim Lesen des Bildes:", err);
+    }
+  }
 
   try {
     const r = await fetch("https://api.mistral.ai/v1/chat/completions", {
@@ -26,8 +42,13 @@ app.post("/chat", async (req, res) => {
         "Authorization": `Bearer ${MISTRAL_API_KEY}`
       },
       body: JSON.stringify({
-        model: "mistral-small-latest",
-        messages: [{ role: "user", content: message }]
+        model: "mistral-small-2506",
+        messages: [
+          {
+            role: "user",
+            content
+          }
+        ]
       })
     });
 
@@ -37,54 +58,12 @@ app.post("/chat", async (req, res) => {
       return res.json({ reply: data.choices[0].message.content });
     }
 
-    console.log("❌ Mistral Chat Error:", data);
+    console.log("❌ Mistral Fehler:", data);
     return res.status(500).json({ reply: "❌ Fehler bei Mistral." });
 
   } catch (err) {
-    console.log("❌ Chat Server Error:", err);
+    console.log("❌ Serverfehler:", err);
     return res.status(500).json({ reply: "❌ Serverfehler." });
-  }
-});
-
-/* -----------------------------------------
-   VISION — Mistral Vision (neues Format)
------------------------------------------- */
-app.post("/vision", upload.single("image"), async (req, res) => {
-  try {
-    const file = fs.readFileSync(req.file.path, { encoding: "base64" });
-
-    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${MISTRAL_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "mistral-small-latest",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "Beschreibe dieses Bild." },
-              { type: "image_base64", image_base64: file }
-            ]
-          }
-        ]
-      })
-    });
-
-    const data = await response.json();
-
-    if (response.ok && data?.choices?.[0]?.message?.content) {
-      return res.json({ reply: data.choices[0].message.content });
-    }
-
-    console.log("❌ Vision Error:", data);
-    return res.status(500).json({ error: "Vision failed", details: data });
-
-  } catch (err) {
-    console.log("❌ Vision Server Error:", err);
-    return res.status(500).json({ error: "Server crashed", details: err });
   }
 });
 
@@ -95,4 +74,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`EduAI Backend läuft auf Port ${PORT}`);
 });
-
