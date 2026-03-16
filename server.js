@@ -21,7 +21,9 @@ const upload = multer({ dest: "uploads/" });
 async function uploadToMistral(filePath) {
   const formData = new FormData();
   formData.append("file", fs.createReadStream(filePath));
-  formData.append("purpose", "vision");
+  
+  // Geändert von 'vision' auf 'ocr', da 'vision' laut Fehlermeldung nicht erlaubt ist
+  formData.append("purpose", "ocr"); 
 
   const response = await fetch("https://api.mistral.ai/v1/files", {
     method: "POST",
@@ -38,7 +40,7 @@ async function uploadToMistral(filePath) {
   }
 
   const data = await response.json();
-  return data.id; // Gibt die file_id zurück
+  return data.id;
 }
 
 /* ---------------------------------------------------------
