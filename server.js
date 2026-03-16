@@ -10,9 +10,9 @@ app.use(express.json({ limit: "20mb" }));
 
 const upload = multer({ dest: "uploads/" });
 
-const API_KEY = "DEIN_MISTRAL_API_KEY";
+const API_KEY = process.env.MISTRAL_API_KEY;
 
-/* TEXT CHAT */
+/* --- normaler Chat: mistral-small --- */
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
 
@@ -23,7 +23,7 @@ app.post("/chat", async (req, res) => {
       "Authorization": `Bearer ${API_KEY}`
     },
     body: JSON.stringify({
-      model: "pixtral-large-latest",
+      model: "mistral-small-latest",
       messages: [
         { role: "user", content: message }
       ]
@@ -34,7 +34,7 @@ app.post("/chat", async (req, res) => {
   res.json({ reply: data.choices[0].message.content });
 });
 
-/* VISION */
+/* --- Vision: Pixtral Vision --- */
 app.post("/vision", upload.single("image"), async (req, res) => {
   const file = fs.readFileSync(req.file.path, { encoding: "base64" });
 
@@ -62,9 +62,29 @@ app.post("/vision", upload.single("image"), async (req, res) => {
   res.json({ reply: data.choices[0].message.content });
 });
 
-/* RAG HOOK (noch leer, aber vorbereitet) */
-app.post("/rag", async (req, res) => {
-  res.json({ status: "RAG endpoint ready" });
+/* --- Bildgenerierung: Pixtral Image --- */
+app.post("/generate", async (req, res) => {
+  const { prompt } = req.body;
+
+  const response = await fetch("https://api.mistral.ai/v1/images/generations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "pixtral-image-latest",
+      prompt
+    })
+  });
+
+  const data = await response.json();
+  res.json({ url: data.data[0].url });
 });
 
-app.listen(3000, () => console.log("EduAI Server läuft auf Port 3000"));
+/* --- Render PORT FIX --- */
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`EduAI Backend läuft auf Port ${PORT}`);
+});
