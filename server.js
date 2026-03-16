@@ -12,17 +12,16 @@ const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
-// Multer für temporäre Speicherung
+// Multer für temporäre Dateien
 const upload = multer({ dest: "uploads/" });
 
 /* ---------------------------------------------------------
-   Hilfsfunktion: Bild zu Mistral hochladen (Files API)
+   Hilfsfunktion: Bild-Upload zu Mistral
 --------------------------------------------------------- */
 async function uploadToMistral(filePath) {
   const formData = new FormData();
   formData.append("file", fs.createReadStream(filePath));
-  
-  // Geändert von 'vision' auf 'ocr', da 'vision' laut Fehlermeldung nicht erlaubt ist
+  // "ocr" ist laut deiner Fehlermeldung der korrekte Zweck für Bildverarbeitung
   formData.append("purpose", "ocr"); 
 
   const response = await fetch("https://api.mistral.ai/v1/files", {
@@ -34,17 +33,17 @@ async function uploadToMistral(filePath) {
     body: formData,
   });
 
+  const data = await response.json();
+
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Mistral Upload Fehler: ${JSON.stringify(err)}`);
+    throw new Error(`Mistral Upload Fehler: ${JSON.stringify(data)}`);
   }
 
-  const data = await response.json();
   return data.id;
 }
 
 /* ---------------------------------------------------------
-   Haupt-Endpoint
+   Haupt-Endpoint: Chat
 --------------------------------------------------------- */
 app.post("/chat", upload.single("image"), async (req, res) => {
   const { message } = req.body;
@@ -53,23 +52,30 @@ app.post("/chat", upload.single("image"), async (req, res) => {
   if (!message) return res.status(400).json({ reply: "❌ Keine Nachricht erhalten." });
 
   try {
-    // 1. Bild-Upload (falls vorhanden)
+    // 1. Datei-Upload falls vorhanden
     if (req.file) {
+      console.log("📸 Lade Bild hoch...");
       fileId = await uploadToMistral(req.file.path);
-      fs.unlinkSync(req.file.path); // Lokale Kopie sofort löschen
+      console.log("✅ Bild hochgeladen, ID:", fileId);
+      
+      // Lokale Datei löschen
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     }
 
-    // 2. Chat-Struktur vorbereiten
-    const content = [{ type: "text", text: message }];
+    // 2. Content-Array bauen
+    const userContent = [{ type: "text", text: message }];
     
     if (fileId) {
-      content.push({
+      userContent.push({
         type: "image_url",
-        image_url: `https://api.mistral.ai/v1/files/${fileId}/content`
+        image_url: {
+          url: `https://api.mistral.ai/v1/files/${fileId}/content`
+        }
       });
     }
 
-    // 3. Anfrage an Mistral Small 2506
+    // 3. Request an Mistral
+    console.log("🤖 Frage Mistral-Small an...");
     const mistralResponse = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -77,31 +83,40 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         "Authorization": `Bearer ${MISTRAL_API_KEY}`
       },
       body: JSON.stringify({
-        model: "mistral-small-2506",
-        messages: [{ role: "user", content }],
-        temperature: 0.2 // Für präzisere Analysen
+        model: "mistral-small-2506", // Oder "mistral-small-2506"
+        messages: [
+          {
+            role: "user",
+            content: userContent
+          }
+        ]
       })
     });
 
     const result = await mistralResponse.json();
 
     if (mistralResponse.ok) {
+      console.log("✅ Antwort erhalten!");
       res.json({ reply: result.choices[0].message.content });
     } else {
-      res.status(500).json({ reply: "❌ Mistral API Fehler", details: result });
+      console.error("❌ Mistral API Fehler:", result);
+      res.status(mistralResponse.status).json({ 
+        reply: "❌ Mistral API Fehler", 
+        details: result 
+      });
     }
 
   } catch (error) {
-    console.error("Fehler:", error);
-    res.status(500).json({ reply: "❌ Interner Fehler", error: error.message });
+    console.error("❌ Server Fehler:", error.message);
+    res.status(500).json({ reply: "❌ Interner Server Fehler", error: error.message });
     
-    // Aufräumen falls nötig
+    // Cleanup im Fehlerfall
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   }
 });
 
-app.get("/", (req, res) => res.send("EduAI Online ✅"));
+app.get("/", (req, res) => res.send("EduAI Backend Online 🚀"));
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server läuft auf Port ${PORT}`);
+  console.log(`Server läuft auf Port ${PORT}`);
 });
