@@ -124,7 +124,7 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         body: JSON.stringify({
           model: "mistral-small-2506",
           messages: [
-            { role: "system", content: "Du bist der Flash-Modus. Antworte kurz aber sinnvoll und präzise.Schreibe nicht zu lang allerdings auch nicht Zu kurz in etwas 3-12 zeilen" },
+            { role: "system", content: "Du bist der Flash-Modus von EduAI. Antworte kurz aber sinnvoll und präzise.Schreibe nicht zu lang allerdings auch nicht Zu kurz in etwas 3-12 zeilen gebe nötige details!" },
             ...chatHistory,
             {
               role: "user",
