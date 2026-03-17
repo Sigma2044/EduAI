@@ -8,7 +8,6 @@ import Groq from "groq-sdk";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// HIER DEINE KEYS EINTRAGEN ODER ÜBER UMGEBUNGSVARIABLEN NUTZEN
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || "DEIN_MISTRAL_KEY";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "DEIN_GROQ_KEY";
 
@@ -17,18 +16,20 @@ const groq = new Groq({ apiKey: GROQ_API_KEY });
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
-// Multer Setup für Bilder
 const upload = multer({ dest: "uploads/" });
 
 app.post("/chat", upload.single("image"), async (req, res) => {
-  const { message } = req.body;
+  // Wir erwarten jetzt auch "history" vom Frontend
+  const { message, history } = req.body; 
+  
+  // Falls history nicht mitgeschickt wurde, starten wir mit einem leeren Array
+  let chatHistory = history ? JSON.parse(history) : [];
 
   try {
     let imageContext = "";
 
-    // 1. SCHRITT: BILD-ANALYSE MIT GROQ (Llama 4 Scout)
     if (req.file) {
-      console.log("📸 Llama 4 Scout (Groq) analysiert das Bild...");
+      console.log("📸 Bild-Analyse läuft...");
       const base64Image = fs.readFileSync(req.file.path).toString("base64");
       
       try {
@@ -38,31 +39,32 @@ app.post("/chat", upload.single("image"), async (req, res) => {
             {
               role: "user",
               content: [
-                { type: "text", text: "Beschreibe dieses Bild sehr genau, damit ich diese Infos einer anderen KI geben kann. Erfasse Texte, Objekte und Zusammenhänge." },
-                { 
-                  type: "image_url", 
-                  image_url: { url: `data:${req.file.mimetype};base64,${base64Image}` } 
-                }
+                { type: "text", text: "Beschreibe dieses Bild kurz und präzise für den Kontext." },
+                { type: "image_url", image_url: { url: `data:${req.file.mimetype};base64,${base64Image}` } }
               ]
             }
           ]
         });
         imageContext = visionCompletion.choices[0].message.content;
       } catch (err) {
-        console.error("❌ Groq Vision Fehler:", err.message);
+        console.error("Groq Vision Fehler:", err.message);
       }
-      
-      // Datei löschen
       fs.unlinkSync(req.file.path);
     }
 
-    // 2. SCHRITT: ANTWORT ERSTELLEN MIT MISTRAL SMALL
-    console.log("🤖 Mistral Small erstellt finale Antwort...");
-    
-    // Wir bauen den Prompt so, dass Mistral vom Bild "weiß"
-    const systemPrompt = imageContext 
-      ? `Du bist ein hilfreicher Assistent. Dem User liegt ein Bild vor, das du nicht direkt sehen kannst, aber hier ist eine exakte Beschreibung davon: "${imageContext}". Nutze diese Info, um die Frage des Users zu beantworten.`
-      : "Du bist ein hilfreicher Assistent.";
+    // 2. Mistral Chat-Logik mit Gedächtnis
+    console.log("🤖 Mistral denkt nach...");
+
+    // Wenn ein Bild da ist, fügen wir die Info als versteckten Hinweis ein
+    if (imageContext) {
+      chatHistory.push({ 
+        role: "system", 
+        content: `KONTEXT: Der User hat ein Bild hochgeladen. Beschreibung: ${imageContext}` 
+      });
+    }
+
+    // Die aktuelle Nachricht des Users zur History hinzufügen
+    chatHistory.push({ role: "user", content: message });
 
     const mistralResponse = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
@@ -73,8 +75,8 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       body: JSON.stringify({
         model: "mistral-small-latest",
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: message }
+          { role: "system", content: "Du bist ein hilfreicher Lern-Assistent namens EduAI.Bei einfachen Fragen antworte nicht zu lange bei komplexen fragen ausführlicher " },
+          ...chatHistory // Hier wird der gesamte bisherige Chat mitgeschickt!
         ]
       })
     });
@@ -82,21 +84,18 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     const result = await mistralResponse.json();
 
     if (mistralResponse.ok) {
-      res.json({ reply: result.choices[0].message.content });
+      const aiReply = result.choices[0].message.content;
+      
+      // Wir schicken die Antwort zurück
+      res.json({ reply: aiReply });
     } else {
-      console.error("❌ Mistral Fehler:", result);
-      res.status(500).json({ reply: "Mistral hat ein Problem.", details: result });
+      res.status(500).json({ reply: "Mistral Fehler", details: result });
     }
 
   } catch (error) {
-    console.error("❌ Allgemeiner Fehler:", error);
-    res.status(500).json({ reply: "Server-Fehler im Hybrid-Mode." });
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    console.error("Server Fehler:", error);
+    res.status(500).json({ reply: "Interner Server Fehler" });
   }
 });
 
-app.get("/", (req, res) => res.send("EduAI Hybrid Backend Online 🚀"));
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server läuft auf Port ${PORT}`);
-});
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server auf Port ${PORT}`));
