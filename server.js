@@ -40,7 +40,8 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    console.log("🤖 Sende Request an mistral-small-2506...");
+    // Ändere nur diesen Teil in deiner server.js:
+    console.log("🤖 Sende Request an pixtral-12b-2409...");
     const mistralResponse = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -48,9 +49,10 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         "Authorization": `Bearer ${MISTRAL_API_KEY}`
       },
       body: JSON.stringify({
-        model: "mistral-small-2506",
+        model: "pixtral-12b-2409", // Nutze das spezifische Vision-Modell aus deiner Liste
         messages: [{ role: "user", content: userContent }],
-        max_tokens: 1000
+        max_tokens: 300, // Weniger Tokens verbrauchen = seltener Rate Limit
+        temperature: 0.7
       })
     });
 
