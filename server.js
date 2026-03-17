@@ -8,30 +8,61 @@ import Groq from "groq-sdk";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// API KEYS (Ersetze diese durch deine echten Keys)
-const MISTRAL_API_KEY = "DEIN_MISTRAL_KEY";
-const GROQ_API_KEY = "DEIN_GROQ_KEY";
+// API Keys NUR aus Umgebungsvariablen
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+if (!MISTRAL_API_KEY || !GROQ_API_KEY) {
+  console.error("❌ MISTRAL_API_KEY oder GROQ_API_KEY fehlt in den Umgebungsvariablen.");
+  process.exit(1);
+}
 
 const groq = new Groq({ apiKey: GROQ_API_KEY });
 
-app.use(cors());
+// CORS nur für deine Domain (bei Bedarf anpassen)
+app.use(cors({
+  origin: "*", // z.B. "https://deine-domain.com"
+  methods: ["POST", "OPTIONS"]
+}));
+
 app.use(express.json({ limit: "50mb" }));
 
-// Multer für Bilder-Uploads
-const upload = multer({ dest: "uploads/" });
+// Multer für Bilder-Uploads – nur Images erlauben
+const upload = multer({
+  dest: "uploads/",
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(null, false);
+    }
+    cb(null, true);
+  }
+});
 
 app.post("/chat", upload.single("image"), async (req, res) => {
-  const { message, history, mode } = req.body; 
-  let chatHistory = history ? JSON.parse(history) : [];
+  const { message, history, mode } = req.body;
+
+  if (!message || typeof message !== "string") {
+    return res.status(400).json({ reply: "❌ 'message' fehlt oder ist ungültig." });
+  }
+
+  let chatHistory = [];
+  if (history) {
+    try {
+      chatHistory = JSON.parse(history);
+      if (!Array.isArray(chatHistory)) chatHistory = [];
+    } catch {
+      chatHistory = [];
+    }
+  }
+
+  let imageContext = "";
 
   try {
-    let imageContext = "";
-
-    // 1. VISION: Llama 4 Scout analysiert das Bild (immer, wenn eins da ist)
+    // 1. VISION: Llama 4 Scout analysiert das Bild (wenn vorhanden und gültig)
     if (req.file) {
       console.log("📸 Vision-Analyse startet...");
       const base64Image = fs.readFileSync(req.file.path).toString("base64");
-      
+
       try {
         const visionRes = await groq.chat.completions.create({
           model: "meta-llama/llama-4-scout-17b-16e-instruct",
@@ -39,15 +70,25 @@ app.post("/chat", upload.single("image"), async (req, res) => {
             role: "user",
             content: [
               { type: "text", text: "Beschreibe das Bild/den Code präzise für eine andere KI." },
-              { type: "image_url", image_url: { url: `data:${req.file.mimetype};base64,${base64Image}` } }
+              {
+                type: "image_url",
+                image_url: `data:${req.file.mimetype};base64,${base64Image}`
+              }
             ]
           }]
         });
-        imageContext = visionRes.choices[0].message.content;
+
+        imageContext = visionRes.choices?.[0]?.message?.content || "";
       } catch (err) {
-        console.error("Vision Error:", err.message);
+        console.error("Vision Error:", err.message || err);
+      } finally {
+        // Bild nach der Vision-Analyse löschen
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (e) {
+          console.error("Fehler beim Löschen der Datei:", e.message || e);
+        }
       }
-      fs.unlinkSync(req.file.path);
     }
 
     // 2. LOGIK: Welches Modell wurde gewählt?
@@ -61,10 +102,15 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         messages: [
           { role: "system", content: "Du bist der Codex-Modus. Ein Coding-Experte. Nutze Markdown für Code." },
           ...chatHistory,
-          { role: "user", content: imageContext ? `Bild-Info: ${imageContext}\nFrage: ${message}` : message }
+          {
+            role: "user",
+            content: imageContext
+              ? `Bild-Info: ${imageContext}\nFrage: ${message}`
+              : message
+          }
         ]
       });
-      finalReply = completion.choices[0].message.content;
+      finalReply = completion.choices?.[0]?.message?.content || "Keine Antwort vom Modell.";
 
     } else {
       // FLASH: Mistral Small via API
@@ -76,16 +122,27 @@ app.post("/chat", upload.single("image"), async (req, res) => {
           "Authorization": `Bearer ${MISTRAL_API_KEY}`
         },
         body: JSON.stringify({
-          model: "mistral-small-latest",
+          model: "mistral-small-2506",
           messages: [
             { role: "system", content: "Du bist der Flash-Modus. Antworte kurz und präzise." },
             ...chatHistory,
-            { role: "user", content: imageContext ? `Bild-Info: ${imageContext}\nFrage: ${message}` : message }
+            {
+              role: "user",
+              content: imageContext
+                ? `Bild-Info: ${imageContext}\nFrage: ${message}`
+                : message
+            }
           ]
         })
       });
+
       const data = await mistralRes.json();
-      finalReply = data.choices[0].message.content;
+      if (!mistralRes.ok) {
+        console.error("Mistral API Error:", data);
+        return res.status(500).json({ reply: "Fehler bei Mistral.", details: data });
+      }
+
+      finalReply = data.choices?.[0]?.message?.content || "Keine Antwort vom Modell.";
     }
 
     res.json({ reply: finalReply });
