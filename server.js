@@ -64,19 +64,19 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       const base64Image = fs.readFileSync(req.file.path).toString("base64");
 
       try {
-        const visionRes = await groq.chat.completions.create({
-          model: "meta-llama/llama-4-scout-17b-16e-instruct",
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: "Beschreibe das Bild/den Code präzise für eine andere KI." },
-              {
-                type: "image_url",
-                image_url: `data:${req.file.mimetype};base64,${base64Image}`
-              }
-            ]
-          }]
-        });
+       const visionRes = await groq.chat.completions.create({
+  model: "meta-llama/llama-4-scout-17b-16e-instruct",
+  messages: [
+    {
+      role: "user",
+      content: [
+        "Beschreibe dieses Bild präzise:",
+        `data:${req.file.mimetype};base64,${base64Image}`
+      ]
+    }
+  ]
+});
+
 
         imageContext = visionRes.choices?.[0]?.message?.content || "";
       } catch (err) {
