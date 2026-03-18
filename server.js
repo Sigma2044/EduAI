@@ -1,4 +1,3 @@
-// backend.js
 import express from "express";
 import cors from "cors";
 import multer from "multer";
@@ -21,6 +20,29 @@ const upload = multer({
   }
 });
 
+function trimHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history.slice(-6);
+}
+
+async function runLLM(messages) {
+  try {
+    const res = await groq.chat.completions.create({
+      model: "qwen/qwen3-32b",
+      messages
+    });
+    return res.choices?.[0]?.message?.content;
+  } catch (err) {
+    console.error("Qwen Error → Fallback:", err.message);
+
+    const fallback = await groq.chat.completions.create({
+      model: "openai/gpt-oss-120b",
+      messages
+    });
+    return fallback.choices?.[0]?.message?.content;
+  }
+}
+
 app.post("/chat", upload.single("image"), async (req, res) => {
   try {
     const { message, history } = req.body;
@@ -28,13 +50,12 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     let chatHistory = [];
     if (history) {
       try {
-        chatHistory = JSON.parse(history);
+        chatHistory = trimHistory(JSON.parse(history));
       } catch {}
     }
 
     let imageContext = "";
 
-    // ⭐ AUTOMATISCHE VISION-ERKENNUNG
     if (req.file) {
       const base64Image = fs.readFileSync(req.file.path).toString("base64");
 
@@ -45,7 +66,7 @@ app.post("/chat", upload.single("image"), async (req, res) => {
             {
               role: "user",
               content: [
-                "Beschreibe dieses Bild präzise und strukturiert wenn schrift zu sehen ist lese sie :",
+                "Beschreibe dieses Bild präzise und strukturiert:",
                 `data:${req.file.mimetype};base64,${base64Image}`
               ]
             }
@@ -60,11 +81,10 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       fs.unlinkSync(req.file.path);
     }
 
-    // ⭐ AUTOMATISCHES TEXTMODELL (405B)
     const messages = [
       {
         role: "system",
-        content: "Du bist EduAI. Erkläre klar, strukturiert und hilfreichaber nicht zu lange (mittelkurz."
+        content: "Du bist EduAI. Erkläre klar, strukturiert und hilfreich (mittlekurz)."
       },
       ...chatHistory,
       {
@@ -75,12 +95,8 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       }
     ];
 
-    const completion = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
-      messages
-    });
+    const reply = await runLLM(messages);
 
-    const reply = completion.choices?.[0]?.message?.content || "Keine Antwort.";
     return res.json({ reply });
 
   } catch (error) {
