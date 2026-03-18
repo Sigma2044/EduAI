@@ -28,18 +28,12 @@ function trimHistory(history) {
 async function runLLM(messages) {
   try {
     const res = await groq.chat.completions.create({
-      model: "qwen/qwen3-32b",
+      model: "openai/gpt-oss-120b",
       messages
     });
     return res.choices?.[0]?.message?.content;
   } catch (err) {
     console.error("Qwen Error → Fallback:", err.message);
-
-    const fallback = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
-      messages
-    });
-    return fallback.choices?.[0]?.message?.content;
   }
 }
 
