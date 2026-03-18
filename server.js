@@ -84,7 +84,7 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     const messages = [
       {
         role: "system",
-        content: "Du bist EduAI. Erkläre klar, strukturiert und hilfreich (mittlekurz)."
+        content: "Du bist EduAI. Erkläre klar, strukturiert und hilfreich (mittlekurz)schreibe deutsch."
       },
       ...chatHistory,
       {
