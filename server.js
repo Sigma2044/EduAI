@@ -61,17 +61,24 @@ app.post("/chat", upload.single("image"), async (req, res) => {
 
       try {
         const visionRes = await groq.chat.completions.create({
-          model: "meta-llama/llama-4-scout-17b-16e-instruct",
-          messages: [
-            {
-              role: "user",
-              content: [
-                "Beschreibe dieses Bild präzise und strukturiert:",
-                `data:${req.file.mimetype};base64,${base64Image}`
-              ]
-            }
-          ]
-        });
+  model: "meta-llama/llama-4-scout-17b-16e-instruct",
+  messages: [
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Beschreibe dieses Bild präzise und strukturiert."
+        },
+        {
+          type: "input_image",
+          image_url: `data:${req.file.mimetype};base64,${base64Image}`
+        }
+      ]
+    }
+  ]
+});
+
 
         imageContext = visionRes.choices?.[0]?.message?.content || "";
       } catch (err) {
