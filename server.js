@@ -47,25 +47,48 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     const msgLower = message ? message.toLowerCase() : "";
     const isImageGeneration = msgLower.startsWith("/image") || msgLower.startsWith("generiere ein bild");
 
-    if (isImageGeneration) {
+   if (isImageGeneration) {
       let prompt = message.replace(/^\/image\s*/i, "").replace(/^generiere ein bild\s*(von\s*)?/i, "");
       
       if (!prompt.trim()) {
         return res.json({ reply: "Bitte gib an, was ich zeichnen soll! (z.B. `/image eine Katze`)" });
       }
 
-      console.log(`🎨 Backend generiert Bild via Pollinations für: ${prompt}`);
+      console.log(`🎨 Originaler Prompt (Deutsch): ${prompt}`);
 
-      // Prompt für die URL codieren (Leerzeichen -> %20)
-      const encodedPrompt = encodeURIComponent(prompt);
-      
-      // Zufälliger Seed sorgt dafür, dass bei gleichem Prompt neue Bilder kommen
+      let finalEnglishPrompt = prompt;
+
+      // KI-Übersetzer via Groq vorschalten
+      try {
+        const translationRes = await groq.chat.completions.create({
+          model: "groq/compound", // Nutzt dein Standard-Modell aus dem Code
+          messages: [
+            { 
+              role: "system", 
+              content: "You are a prompt translator. Translate the user's image prompt from German to English. Enhance it slightly with vivid descriptive keywords for high quality (e.g., photorealistic, detailed). Reply ONLY with the final English prompt. No conversational text, no quotes." 
+            },
+            { role: "user", content: prompt }
+          ]
+        });
+
+        const translatedText = translationRes.choices?.[0]?.message?.content?.trim();
+        if (translatedText) {
+          finalEnglishPrompt = translatedText;
+          console.log(`🌍 Automatische Übersetzung & Optimierung: ${finalEnglishPrompt}`);
+        }
+      } catch (transErr) {
+        console.error("⚠️ Übersetzungs-Fallback aktiv:", transErr.message);
+        // Falls Groq mal hakt, nutzen wir einfach das deutsche Original + Standard-Keywords
+        finalEnglishPrompt = `${prompt}, photorealistic, highly detailed, 8k resolution`;
+      }
+
+      // Prompt für die URL codieren
+      const encodedPrompt = encodeURIComponent(finalEnglishPrompt);
       const randomSeed = Math.floor(Math.random() * 100000);
       
-      // Nutzt das ultraschnelle FLUX-Modell von Pollinations völlig ohne Key
+      // Bild-URL mit dem englischen, optimierten Prompt bauen
       const generatedImageUrl = `https://image.pollinations.ai/p/${encodedPrompt}?model=flux&width=1024&height=768&seed=${randomSeed}`;
 
-      // Direkt die fertige URL ans Frontend schicken
       return res.json({ 
         reply: `Hier ist dein generiertes Bild für: **${prompt}**`, 
         generatedImage: generatedImageUrl 
