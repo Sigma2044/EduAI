@@ -13,11 +13,44 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 app.use(cors({ origin: "*", methods: ["POST", "OPTIONS"] }));
 app.use(express.json({ limit: "50mb" }));
 
+// Passe den Multer-Upload an, damit er Bilder UND Audio (webm/wav/mp3) akzeptiert
 const upload = multer({
   dest: "uploads/",
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) return cb(null, false);
-    cb(null, true);
+    if (file.mimetype.startsWith("image/") || file.mimetype.startsWith("audio/")) {
+      return cb(null, true);
+    }
+    cb(null, false);
+  }
+});
+
+// --- NEUE ROUTE FÜR SPRACHAUFNAHMEN (WHISPER) ---
+app.post("/transcribe", upload.single("audio"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Keine Audiodatei empfangen." });
+    }
+
+    console.log(`🎙️ Verarbeite Audio-Aufnahme... (${req.file.mimetype})`);
+
+    // Sende die Audiodatei direkt an Groqs Whisper-Modell
+    const transcription = await groq.audio.transcriptions.create({
+      file: fs.createReadStream(req.file.path),
+      model: "whisper-large-v3",
+      language: "de", // Erzwingt deutsche Erkennung
+      response_format: "json",
+    });
+
+    // Temporäre Datei nach dem Upload löschen
+    fs.unlinkSync(req.file.path);
+
+    console.log(`🗣️ Whisper erkannt: "${transcription.text}"`);
+    return res.json({ text: transcription.text });
+
+  } catch (error) {
+    console.error("❌ Whisper Fehler:", error.message);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    return res.status(500).json({ error: "Fehler bei der Spracherkennung." });
   }
 });
 
