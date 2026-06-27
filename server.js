@@ -56,21 +56,45 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     const msgLower = message ? message.toLowerCase() : "";
     const isImageGeneration = msgLower.startsWith("/image") || msgLower.startsWith("generiere ein bild");
 
-  if (isImageGeneration) {
+if (isImageGeneration) {
       let prompt = message.replace(/^\/image\s*/i, "").replace(/^generiere ein bild\s*(von\s*)?/i, "");
       
       if (!prompt.trim()) {
         return res.json({ reply: "Bitte gib an, was ich zeichnen soll! (z.B. `/image eine Katze`)" });
       }
 
-      console.log(`🎨 Backend leitet Prompt weiter an Frontend: ${prompt}`);
+      console.log(`🎨 Backend generiert Bild für: ${prompt}`);
 
-      // Wir senden einfach nur den sauberen Prompt und ein Flag zurück
-      return res.json({ 
-        reply: `Ich generiere jetzt das Bild für: **${prompt}**...`, 
-        triggerFrontendImage: true,
-        prompt: prompt
-      });
+      try {
+        const response = await fetch(
+          "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
+          {
+            headers: { 
+              "Authorization": `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+              "Content-Type": "application/json"
+            },
+            method: "POST",
+            body: JSON.stringify({ inputs: prompt }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Hugging Face API meldet Status ${response.status}`);
+        }
+
+        // Bilddaten im Server abfangen und in Base64-Text umwandeln
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+        return res.json({ 
+          reply: `Hier ist dein generiertes Bild für: **${prompt}**`, 
+          generatedImage: `data:image/jpeg;base64,${base64}` 
+        });
+
+      } catch (err) {
+        console.error("❌ Fehler im Backend:", err.message);
+        return res.status(500).json({ reply: `Fehler bei der Bildgenerierung: ${err.message}` });
+      }
     }
     // --- LOGIK FÜR TEXT- UND VISION-CHATS (Unverändert) ---
     let chatHistory = [];
