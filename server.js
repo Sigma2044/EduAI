@@ -50,35 +50,38 @@ app.post("/chat", upload.single("image"), async (req, res) => {
 
     let imageContext = "";
 
-    if (req.file) {
+   if (req.file) {
       const base64Image = fs.readFileSync(req.file.path).toString("base64");
 
       try {
         const visionRes = await groq.chat.completions.create({
-  model: "meta-llama/llama-4-scout-17b-16e-instruct",
-  messages: [
-    {
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: "Beschreibe dieses Bild präzise und strukturiert."
-        },
-        {
-          type: "input_image",
-          image_url: `data:${req.file.mimetype};base64,${base64Image}`
-        }
-      ]
-    }
-  ]
-});
-
+          // Hinweis: Stelle sicher, dass dieses Modell auf Groq für Vision freigeschaltet ist (z.B. llama-3.2-11b-vision-preview)
+          model: "meta-llama/llama-4-scout-17b-16e-instruct", 
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Beschreibe dieses Bild präzise und strukturiert für eine Hausaufgabenhilfe."
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${req.file.mimetype};base64,${base64Image}`
+                  }
+                }
+              ]
+            }
+          ]
+        });
 
         imageContext = visionRes.choices?.[0]?.message?.content || "";
       } catch (err) {
         console.error("Vision Error:", err.message);
       }
 
+      // Löscht das temporäre Bild wieder sauber vom Server
       fs.unlinkSync(req.file.path);
     }
 
