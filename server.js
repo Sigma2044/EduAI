@@ -3,21 +3,12 @@ import cors from "cors";
 import multer from "multer";
 import fs from "fs";
 import Groq from "groq-sdk";
-import { HfInference } from "@huggingface/inference"; // NEU: Hugging Face Bibliothek
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialisierung der APIs
-// Initialisierung der APIs mit benutzerdefinierten Headern für Stabilität
+// Initialisierung der Groq-API
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY, {
-  headers: {
-    "User-Agent": "EduAI-Application/1.0",
-    "Accept": "application/json"
-  }
-});
 
 app.use(cors({ origin: "*", methods: ["POST", "OPTIONS"] }));
 app.use(express.json({ limit: "50mb" }));
@@ -52,51 +43,36 @@ app.post("/chat", upload.single("image"), async (req, res) => {
   try {
     const { message, history } = req.body;
 
-    // --- NEUER, STABILER BLOCK FÜR HUGGING FACE BILDGENERIERUNG ---
+    // --- NEUER BLOCK FÜR POLLINATIONS AI BILDGENERIERUNG ---
     const msgLower = message ? message.toLowerCase() : "";
     const isImageGeneration = msgLower.startsWith("/image") || msgLower.startsWith("generiere ein bild");
 
-if (isImageGeneration) {
+    if (isImageGeneration) {
       let prompt = message.replace(/^\/image\s*/i, "").replace(/^generiere ein bild\s*(von\s*)?/i, "");
       
       if (!prompt.trim()) {
         return res.json({ reply: "Bitte gib an, was ich zeichnen soll! (z.B. `/image eine Katze`)" });
       }
 
-      console.log(`🎨 Backend generiert Bild für: ${prompt}`);
+      console.log(`🎨 Backend generiert Bild via Pollinations für: ${prompt}`);
 
-      try {
-        const response = await fetch(
-          "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
-          {
-            headers: { 
-              "Authorization": `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
-              "Content-Type": "application/json"
-            },
-            method: "POST",
-            body: JSON.stringify({ inputs: prompt }),
-          }
-        );
+      // Prompt für die URL codieren (Leerzeichen -> %20)
+      const encodedPrompt = encodeURIComponent(prompt);
+      
+      // Zufälliger Seed sorgt dafür, dass bei gleichem Prompt neue Bilder kommen
+      const randomSeed = Math.floor(Math.random() * 100000);
+      
+      // Nutzt das ultraschnelle FLUX-Modell von Pollinations völlig ohne Key
+      const generatedImageUrl = `https://image.pollinations.ai/p/${encodedPrompt}?model=flux&width=1024&height=768&seed=${randomSeed}`;
 
-        if (!response.ok) {
-          throw new Error(`Hugging Face API meldet Status ${response.status}`);
-        }
-
-        // Bilddaten im Server abfangen und in Base64-Text umwandeln
-        const arrayBuffer = await response.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString("base64");
-
-        return res.json({ 
-          reply: `Hier ist dein generiertes Bild für: **${prompt}**`, 
-          generatedImage: `data:image/jpeg;base64,${base64}` 
-        });
-
-      } catch (err) {
-        console.error("❌ Fehler im Backend:", err.message);
-        return res.status(500).json({ reply: `Fehler bei der Bildgenerierung: ${err.message}` });
-      }
+      // Direkt die fertige URL ans Frontend schicken
+      return res.json({ 
+        reply: `Hier ist dein generiertes Bild für: **${prompt}**`, 
+        generatedImage: generatedImageUrl 
+      });
     }
-    // --- LOGIK FÜR TEXT- UND VISION-CHATS (Unverändert) ---
+
+    // --- LOGIK FÜR TEXT- UND VISION-CHATS ---
     let chatHistory = [];
     if (history) {
       try { chatHistory = trimHistory(JSON.parse(history)); } catch {}
@@ -139,5 +115,5 @@ if (isImageGeneration) {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 EduAI Backend mit Hugging Face Bibliothek läuft auf Port ${PORT}`);
+  console.log(`🚀 EduAI Backend läuft stabil auf Port ${PORT}`);
 });
