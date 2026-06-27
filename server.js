@@ -56,53 +56,21 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     const msgLower = message ? message.toLowerCase() : "";
     const isImageGeneration = msgLower.startsWith("/image") || msgLower.startsWith("generiere ein bild");
 
-   if (isImageGeneration) {
+  if (isImageGeneration) {
       let prompt = message.replace(/^\/image\s*/i, "").replace(/^generiere ein bild\s*(von\s*)?/i, "");
       
       if (!prompt.trim()) {
         return res.json({ reply: "Bitte gib an, was ich zeichnen soll! (z.B. `/image eine Katze`)" });
       }
 
-      console.log(`🎨 Generiere Bild direkt via Fetch für Prompt: ${prompt}`);
+      console.log(`🎨 Backend leitet Prompt weiter an Frontend: ${prompt}`);
 
-      try {
-        // Nativer Fetch-Aufruf direkt an das Hugging Face API-Gateway
-        const hfResponse = await fetch(
-          "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
-          {
-            headers: { 
-              "Authorization": `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
-              "Content-Type": "application/json",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-              "Accept": "*/*"
-            },
-            method: "POST",
-            body: JSON.stringify({ inputs: prompt }),
-          }
-        );
-
-        // Falls die API überlastet ist oder der Key nicht stimmt, Fehler abfangen
-        if (!hfResponse.ok) {
-          const errText = await hfResponse.text().catch(() => "Keine Fehlerdetails");
-          throw new Error(`HF-Status: ${hfResponse.status} - ${errText}`);
-        }
-
-        // Bilddaten aus dem Response-Stream ziehen
-        const arrayBuffer = await hfResponse.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const base64Image = buffer.toString("base64");
-        
-        const generatedImageUrl = `data:image/jpeg;base64,${base64Image}`;
-
-        return res.json({ 
-          reply: `Hier ist dein generiertes Bild für: **${prompt}**`, 
-          generatedImage: generatedImageUrl 
-        });
-
-      } catch (err) {
-        console.error("Bildgenerierung fehlgeschlagen:", err.message);
-        return res.status(500).json({ reply: `Fehler bei der Bildgenerierung: ${err.message}` });
-      }
+      // Wir senden einfach nur den sauberen Prompt und ein Flag zurück
+      return res.json({ 
+        reply: `Ich generiere jetzt das Bild für: **${prompt}**...`, 
+        triggerFrontendImage: true,
+        prompt: prompt
+      });
     }
     // --- LOGIK FÜR TEXT- UND VISION-CHATS (Unverändert) ---
     let chatHistory = [];
