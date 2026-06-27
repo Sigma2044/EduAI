@@ -9,8 +9,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Initialisierung der APIs
+// Initialisierung der APIs mit benutzerdefinierten Headern für Stabilität
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY); // NEU: HF Client initialisieren
+
+const hf = new HfInference(process.env.HUGGINGFACE_API_KEY, {
+  headers: {
+    "User-Agent": "EduAI-Application/1.0",
+    "Accept": "application/json"
+  }
+});
 
 app.use(cors({ origin: "*", methods: ["POST", "OPTIONS"] }));
 app.use(express.json({ limit: "50mb" }));
