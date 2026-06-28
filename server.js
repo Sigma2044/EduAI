@@ -147,7 +147,7 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     }
 
     const messages = [
-      { role: "system", content: "Du bist EduAI. Erkläre klar, strukturiert und hilfreich (mittelkurz) auf Deutsch. Wenn der Benutzer ein Dokument oder Bild bereitstellt, beziehe dich bei der Beantwortung seiner Frage direkt auf dessen Inhalt." },
+      { role: "system", content: "Du bist KanoAI. Erkläre klar, strukturiert und hilfreich und agiere wie ein mensch antwortet würde (mittelkurz) auf Deutsch. Wenn der Benutzer ein Dokument oder Bild bereitstellt, beziehe dich bei der Beantwortung seiner Frage direkt auf dessen Inhalt." },
       ...chatHistory,
       { role: "user", content: extraContext ? `${extraContext}\n\nFrage des Users:\n${message || "Fasse das Dokument zusammen."}` : message }
     ];
