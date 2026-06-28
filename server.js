@@ -1,3 +1,4 @@
+process.env.PDF_PARSE_IGNORE_DATA_DIRECTORY = "true";
 
 import express from "express";
 import cors from "cors";
@@ -43,7 +44,7 @@ async function runLLM(messages) {
     return res.choices?.[0]?.message?.content;
   } catch (err) {
     console.error("LLM Error:", err.message);
-    return "Fehler bei der Textgenerierung.";
+    return "Fehler bei der Textgenerierung/Rate Limit erreicht erneut probieren in 30s";
   }
 }
 
