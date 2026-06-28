@@ -53,7 +53,7 @@ async function runLLM(messages) {
         model: "llama-3.3-70b-versatile", // Sehr robust gegen Überlastung und große Datenmengen
         messages
       });
-      return fallbackRes.choices?.[0]?.message?.content + "\n\n*(Hinweis: Beantwortet via Backup-Modell wegen Systemauslastung)*";
+     return fallbackRes.choices?.[0]?.message?.content;
     } catch (fallbackErr) {
       console.error("❌ Auch das Fallback-Modell ist gescheitert:", fallbackErr.message);
       
