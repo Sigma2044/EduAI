@@ -98,16 +98,34 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     // ==========================================
 
     // WETTER
-    if (msgLower.includes("wetter")) {
-      const url = 'https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m&timezone=Europe%2FBerlin';
-      try {
-        const response = await fetch(url);
-        const data = await response.json();
-        return res.json({ reply: `[WEATHER_SYS]: In Berlin sind es gerade ${data.current.temperature_2m}°C.` });
-      } catch {
-        return res.json({ reply: "[WEATHER_SYS]: Fehler beim Abruf der Wetterdaten." });
-      }
-    }
+if (msgLower.includes("wetter")) {
+  // Aktualisierte API-URL mit erweitertem Zustand (weather_code)
+  const url = 'https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m,weather_code&timezone=Europe%2FBerlin';
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'EduAI-Bot/1.0' } // Hilft gegen Blockaden der API
+    });
+    
+    if (!response.ok) throw new Error("API-Antwort nicht okay");
+    
+    const data = await response.json();
+    const temp = data.current.temperature_2m;
+    const code = data.current.weather_code;
+    
+    // Wetter-Code in lesbaren Text übersetzen
+    let zustand = "klarer Himmel";
+    if (code >= 1 && code <= 3) zustand = "leicht bewölkt";
+    if (code >= 61 && code <= 65) zustand = "Regen 🌧️";
+    if (code >= 71 && code <= 75) zustand = "Schnee ❄️";
+    if (code === 45 || code === 48) zustand = "Nebel 🌫️";
+    if (code >= 95) zustand = "Gewitter ⚡";
+
+    return res.json({ reply: `[WEATHER_SYS]: In Berlin sind es gerade **${temp}°C** (${zustand}).` });
+  } catch (error) {
+    console.error("Wetter-Fehler Details:", error.message);
+    return res.json({ reply: "[WEATHER_SYS]: Wetterdaten temporär nicht erreichbar." });
+  }
+}
 
     // KRYPTO
     if (msgLower.includes("crypto") || msgLower.includes("krypto") || msgLower.includes("btc")) {
