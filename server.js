@@ -87,9 +87,14 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
 // CHAT ROUTE (Unterstützt jetzt Text, Bild-Generierung, Vision-Bilder UND PDFs)
 app.post("/chat", upload.single("image"), async (req, res) => {
   try {
+    // 1. ZUERST die Daten aus dem Request holen
     const { message, history } = req.body;
-// ==========================================
-    // 1. SYSTEM-APIS DIREKT ABFANGEN
+    
+    // 2. DANNACH direkt msgLower definieren (Das hat gefehlt!)
+    const msgLower = message ? message.toLowerCase() : "";
+
+    // ==========================================
+    // 3. JETZT ERST DIE SYSTEM-APIS ABFANGEN
     // ==========================================
 
     // WETTER
@@ -127,7 +132,6 @@ app.post("/chat", upload.single("image"), async (req, res) => {
           return res.json({ reply: `[WIKI_SYS]: ${data.extract}` });
         }
       } catch {}
-      // Falls Wiki fehlschlägt, läuft es unten einfach normal weiter zur KI
     }
 
     // NEWS (Tagesschau)
@@ -142,6 +146,8 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         return res.json({ reply: "[NEWS_SYS]: Nachrichten-Feed konnte nicht geladen werden." });
       }
     }
+
+    // ... Hier läuft dein Code für Bilder, PDFs und normalen Chat ganz normal weiter
     // --- POLLINATIONS AI BILDGENERIERUNG ---
     const msgLower = message ? message.toLowerCase() : "";
     const isImageGeneration = msgLower.startsWith("/image") || msgLower.startsWith("generiere ein bild");
