@@ -121,6 +121,8 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         } catch (pdfErr) {
           console.error("Fehler beim PDF-Parsen:", pdfErr.message);
           extraContext = "Hinweis: Eine PDF-Datei wurde hochgeladen, konnte aber nicht gelesen werden.";
+          // Sicherstellen, dass die Datei bei einem Parse-Fehler trotzdem gelöscht wird:
+          if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); 
         }
       } else if (req.file.mimetype.startsWith("image/")) {
         // 📸 BILD VERARBEITUNG (Vision)
