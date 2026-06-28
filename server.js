@@ -88,7 +88,60 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
 app.post("/chat", upload.single("image"), async (req, res) => {
   try {
     const { message, history } = req.body;
+// ==========================================
+    // 1. SYSTEM-APIS DIREKT ABFANGEN
+    // ==========================================
 
+    // WETTER
+    if (msgLower.includes("wetter")) {
+      const url = 'https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m&timezone=Europe%2FBerlin';
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        return res.json({ reply: `[WEATHER_SYS]: In Berlin sind es gerade ${data.current.temperature_2m}°C.` });
+      } catch {
+        return res.json({ reply: "[WEATHER_SYS]: Fehler beim Abruf der Wetterdaten." });
+      }
+    }
+
+    // KRYPTO
+    if (msgLower.includes("crypto") || msgLower.includes("krypto") || msgLower.includes("btc")) {
+      const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=eur';
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        return res.json({ reply: `[CRYPTO_SYS]: BTC: ${data.bitcoin.eur.toLocaleString()} € | ETH: ${data.ethereum.eur.toLocaleString()} €` });
+      } catch {
+        return res.json({ reply: "[CRYPTO_SYS]: Fehler beim Laden der Krypto-Kurse." });
+      }
+    }
+
+    // WIKIPEDIA
+    if (msgLower.startsWith("was ist") || msgLower.startsWith("wer ist") || msgLower.includes("wiki")) {
+      const suchbegriff = msgLower.replace("was ist", "").replace("wer ist", "").replace("wiki", "").trim();
+      const url = `https://de.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(suchbegriff)}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.extract) {
+          return res.json({ reply: `[WIKI_SYS]: ${data.extract}` });
+        }
+      } catch {}
+      // Falls Wiki fehlschlägt, läuft es unten einfach normal weiter zur KI
+    }
+
+    // NEWS (Tagesschau)
+    if (msgLower.includes("news") || msgLower.includes("nachrichten")) {
+      const url = 'https://www.tagesschau.de/api/v1/homepage';
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        const topNews = data.news.slice(0, 3).map(n => `• ${n.title}`).join('\n');
+        return res.json({ reply: `[NEWS_SYS] Aktuelle Top-Meldungen:\n${topNews}` });
+      } catch {
+        return res.json({ reply: "[NEWS_SYS]: Nachrichten-Feed konnte nicht geladen werden." });
+      }
+    }
     // --- POLLINATIONS AI BILDGENERIERUNG ---
     const msgLower = message ? message.toLowerCase() : "";
     const isImageGeneration = msgLower.startsWith("/image") || msgLower.startsWith("generiere ein bild");
