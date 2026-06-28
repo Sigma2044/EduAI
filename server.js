@@ -6,6 +6,7 @@ import multer from "multer";
 import fs from "fs";
 import Groq from "groq-sdk";
 import pdfParse from "pdf-parse"; // NEU: PDF Parser importieren
+import axios from "axios";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -97,22 +98,19 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     // 3. JETZT ERST DIE SYSTEM-APIS ABFANGEN
     // ==========================================
 
-    // WETTER
+   // WETTER (Mit Axios)
 if (msgLower.includes("wetter")) {
-  // Aktualisierte API-URL mit erweitertem Zustand (weather_code)
   const url = 'https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m,weather_code&timezone=Europe%2FBerlin';
   try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'EduAI-Bot/1.0' } // Hilft gegen Blockaden der API
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'EduAI-Bot/1.0' }
     });
     
-    if (!response.ok) throw new Error("API-Antwort nicht okay");
-    
-    const data = await response.json();
+    const data = response.data;
     const temp = data.current.temperature_2m;
     const code = data.current.weather_code;
     
-    // Wetter-Code in lesbaren Text übersetzen
+    // Wetter-Code Übersetzung
     let zustand = "klarer Himmel";
     if (code >= 1 && code <= 3) zustand = "leicht bewölkt";
     if (code >= 61 && code <= 65) zustand = "Regen 🌧️";
@@ -122,11 +120,11 @@ if (msgLower.includes("wetter")) {
 
     return res.json({ reply: `[WEATHER_SYS]: In Berlin sind es gerade **${temp}°C** (${zustand}).` });
   } catch (error) {
-    console.error("Wetter-Fehler Details:", error.message);
+    // Das loggt den echten Fehler direkt in deine Render-Konsole
+    console.error("❌ Detaillierter Wetter-Fehler:", error.response ? error.response.data : error.message);
     return res.json({ reply: "[WEATHER_SYS]: Wetterdaten temporär nicht erreichbar." });
   }
 }
-
     // KRYPTO
     if (msgLower.includes("crypto") || msgLower.includes("krypto") || msgLower.includes("btc")) {
       const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=eur';
