@@ -149,7 +149,6 @@ app.post("/chat", upload.single("image"), async (req, res) => {
 
     // ... Hier läuft dein Code für Bilder, PDFs und normalen Chat ganz normal weiter
     // --- POLLINATIONS AI BILDGENERIERUNG ---
-    const msgLower = message ? message.toLowerCase() : "";
     const isImageGeneration = msgLower.startsWith("/image") || msgLower.startsWith("generiere ein bild");
 
     if (isImageGeneration) {
