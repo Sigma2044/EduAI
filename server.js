@@ -37,14 +37,32 @@ function trimHistory(history) {
 
 async function runLLM(messages) {
   try {
+    // 1. Versuch: Mit deinem Wunsch-Hauptmodell
     const res = await groq.chat.completions.create({
       model: "groq/compound", 
       messages
     });
     return res.choices?.[0]?.message?.content;
   } catch (err) {
-    console.error("LLM Error:", err.message);
-    return "Fehler bei der Textgenerierung/Rate Limit erreicht erneut probieren in 30s";
+    console.error("⚠️ Hauptmodell-Fehler (429/413):", err.message);
+    console.log("🔄 Wechsle automatisch auf stabiles Fallback-Modell...");
+    
+    try {
+      // 2. Versuch: Fallback auf ein schnelles Modell mit extrem hohen Limits
+      const fallbackRes = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile", // Sehr robust gegen Überlastung und große Datenmengen
+        messages
+      });
+      return fallbackRes.choices?.[0]?.message?.content + "\n\n*(Hinweis: Beantwortet via Backup-Modell wegen Systemauslastung)*";
+    } catch (fallbackErr) {
+      console.error("❌ Auch das Fallback-Modell ist gescheitert:", fallbackErr.message);
+      
+      // Spezifische Fehlermeldung für den User, falls das PDF einfach astronomisch riesig war
+      if (err.message.includes("large") || fallbackErr.message.includes("large")) {
+        return "Das hochgeladene Dokument enthält leider zu viel Text für die KI. Bitte versuche es mit einer kleineren Datei.";
+      }
+      return "Der Server ist aktuell stark überlastet. Bitte versuche es in wenigen Sekunden noch einmal.";
+    }
   }
 }
 
