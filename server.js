@@ -221,14 +221,11 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         
         let translatedText = translationRes.choices?.[0]?.message?.content?.trim() || "";
         
-        // 🛠️ RADIKALER FILTER: Falls Groq wieder einen Roman schreibt, extrahieren wir nur die beste Zeile
         if (translatedText.includes("\n") || translatedText.toLowerCase().includes("translation")) {
-          // Wir suchen nach typischen Mustern wie "“flying cat”" oder Zeilen mit Anführungszeichen
           const match = translatedText.match(/"([^"]+)"/i) || translatedText.match(/`([^`]+)`/i);
           if (match && match[1]) {
             translatedText = match[1];
           } else {
-            // Fallback: Nimm einfach die allerletzte nicht-leere Zeile (oft das Resultat)
             const lines = translatedText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
             translatedText = lines[lines.length - 1].replace(/^[-*> ]*/, "");
           }
@@ -241,57 +238,46 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         console.error("Translation failed, using original prompt:", transErr);
       }
 
-      // 2. Video-Generierung via LTX 2.3 Studio
-    // 2. Video-Generierung via techfreakworm/LTX2.3-Studio (Blackwell GPUs)
+      // 2. Video-Generierung via techfreakworm/LTX2.3-Studio (Blackwell GPUs)
       try {
         if (finalEnglishPrompt.length < 3) finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
 
         const spaceId = "techfreakworm/LTX2.3-Studio";
         console.log(`🎬 Verbinde mit ${spaceId} für: "${finalEnglishPrompt}"...`);
         
-        // Token aus den Render-Umgebungsvariablen ziehen
-        const hfToken = process.env.HUGGINGFACE_API_KEY; 
-        
-        // Verbindung zum neuen Space mit Token-Authentifizierung aufbauen
+        const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
         const client = await Client.connect(spaceId, hfToken ? { token: hfToken } : {});
 
-        // Exakte Parameterübergabe laut bereitgestellter API-Doku (13 Parameter)
+        // Exakt 13 Parameter für diesen Endpunkt
         const result = await client.predict("/handler", { 		
-          param_0: finalEnglishPrompt, // Dein optimierter Prompt
-          param_1: "Fast",              // Preset
-          param_2: 768,                 // Width (Laut LTX am besten 768)
-          param_3: 512,                 // Height
-          param_4: 3,                   // Länge in Sekunden
-          param_5: 24,                  // FPS
-          param_6: 42,                  // Seed
-          param_7: true,                // Randomize seed
-          param_8: "low quality, worst quality, deformed, blurry, watermark", // Negative Prompt
-          param_9: "none",              // Camera movement
-          param_10: 0,                  // Camera strength
-          param_11: false,              // Apply IC-LoRA-Detailer
-          param_12: 0,                  // Detailer strength
+          param_0: finalEnglishPrompt, 
+          param_1: "Fast",              
+          param_2: 768,                 
+          param_3: 512,                 
+          param_4: 3,                   
+          param_5: 24,                  
+          param_6: 42,                  
+          param_7: true,                
+          param_8: "low quality, worst quality, deformed, blurry, watermark", 
+          param_9: "none",              
+          param_10: 0,                  
+          param_11: false,              
+          param_12: 0,                  
         });
 
         console.log("📦 LTX API-Antwort empfangen:", JSON.stringify(result.data));
 
         let videoUrl = "";
         if (result.data && result.data.length > 0) {
-          // Wir durchsuchen das Ergebnis-Array nach der Video-URL
           for (const item of result.data) {
             if (!item) continue;
-            
-            // Fall 1: Verschachteltes Video-Objekt
             if (item.video && item.video.url) {
               videoUrl = item.video.url;
               break;
-            } 
-            // Fall 2: Flache URL im Objekt
-            else if (item.url) {
+            } else if (item.url) {
               videoUrl = item.url;
               break;
-            } 
-            // Fall 3: Direkter String-Link
-            else if (typeof item === "string" && item.startsWith("http")) {
+            } else if (typeof item === "string" && item.startsWith("http")) {
               videoUrl = item;
               break;
             }
@@ -309,8 +295,9 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Die Video-Generierung auf dem Blackwell-Server ist fehlgeschlagen. Eventuell ist der Space im Sleep-Modus." });
+        return res.json({ reply: "Die Video-Generierung auf dem Blackwell-Server ist fehlgeschlagen." });
       }
+    }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
     let chatHistory = [];
     if (history) {
