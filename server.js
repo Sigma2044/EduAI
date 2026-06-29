@@ -45,47 +45,34 @@ function trimHistory(history) {
 
 // 4-stufige intelligente KI-Kaskade (DeepSeek -> GLM -> Liquid OSS -> Llama Backup)
 async function runLLM(messages) {
- // --- STUFE 1: NVIDIA NEMOTRON-3 ULTRA 550B (Hauptmodell) ---
+  // --- STUFE 1: GROQ COMPOUND (Dein primäres Hauptmodell) ---
   try {
-    console.log("🚀 Stufe 1: Nvidia Nemotron-3 Ultra wird angefragt...");
-    const completion = await nvidiaClient.chat.completions.create({
-      model: "nvidia/nemotron-3-ultra-550b-a55b",
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 4096,
-      stream: false
+    console.log("⚡ Stufe 1: Groq Compound wird angefragt...");
+    const res = await groq.chat.completions.create({
+      model: "groq/compound", 
+      messages: messages
     });
-    return completion.choices[0]?.message?.content;
+    return res.choices?.[0]?.message?.content;
   } catch (err) {
-    console.warn("⚠️ Stufe 1 (Nemotron Ultra) fehlgeschlagen. Wechsle auf DeepSeek...");
+    console.error("⚠️ Hauptmodell-Fehler (429/413):", err.message);
+    console.log("🔄 Wechsle automatisch auf stabiles Fallback-Modell...");
   }
 
-  // --- STUFE 3: LIQUID LFM-140B (GPT-OSS Alternative) ---
+  // --- STUFE 2: LLAMA 3.3 70B (Dein stabiles Groq-Backup) ---
   try {
-    console.log("🔄 Stufe 3: Wechsle auf gpt-oss-120b alternative...");
-    const completion = await nvidiaClient.chat.completions.create({
-      model: "liquid/lfm-140b",
-      messages: messages,
-      temperature: 0.7,
-      max_tokens: 4096,
-      stream: false
-    });
-    return completion.choices[0]?.message?.content;
-  } catch (err) {
-    console.warn("⚠️ Stufe 3 (GPT-OSS) fehlgeschlagen:", err.message);
-  }
-
-  // --- STUFE 4: LLAMA 3.3 70B (Groq Backup) ---
-  try {
-    console.log("🔄 Stufe 4: Letzter Rettungsanker - Llama via Groq...");
+    console.log("🔄 Stufe 2: Llama 3.3 via Groq wird angefragt...");
     const fallbackRes = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: messages
     });
     return fallbackRes.choices?.[0]?.message?.content;
   } catch (fallbackErr) {
-    console.error("❌ Alle 4 KI-Stufen sind gescheitert!", fallbackErr.message);
-    return "StaticAI-Meldung: Alle KI-Schnittstellen (Nvidia & Groq) sind temporär ausgelastet. Bitte versuche es gleich noch einmal.";
+    console.error("❌ Auch das Fallback-Modell ist gescheitert:", fallbackErr.message);
+    
+    if (err.message.includes("large") || fallbackErr.message.includes("large")) {
+      return "Das hochgeladene Dokument enthält leider zu viel Text für die KI. Bitte versuche es mit einer kleineren Datei.";
+    }
+    return "Der Server ist aktuell stark überlastet. Bitte versuche es in wenigen Sekunden noch einmal.";
   }
 }
 
