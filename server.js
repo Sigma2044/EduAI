@@ -217,26 +217,40 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         });
         const translatedText = translationRes.choices?.[0]?.message?.content?.trim();
         if (translatedText) finalEnglishPrompt = translatedText;
-      } catch {}
+      } catch (transErr) {
+        console.error("Translation failed:", transErr);
+      }
 
-    try {
-        console.log(`🎬 Verbinde mit Wan2.1 Fast Space für: "${finalEnglishPrompt}"...`);
+      // 2. Video-Generierung über den offiziellen Wan-AI/Wan2.1 Space
+      try {
+        console.log(`🎬 Verbinde mit offiziellem Wan-AI Space für: "${finalEnglishPrompt}"...`);
         
-        // Verbindung zum schnellen Wan 2.1 Space
-        const client = await Client.connect("ysharma/wan2-1-fast");
+        const client = await Client.connect("Wan-AI/Wan2.1");
 
-        // Wan2.1 Fast benötigt typischerweise nur diese 5 klaren Parameter
-        const result = await client.predict("/predict", [         
-          finalEnglishPrompt,  // prompt (dein optimierter englischer Text)
-          4,                   // num_inference_steps (Fast-Versionen brauchen oft nur 4-8 Steps!)
-          "480*832",           // resolution (z.B. "480*832" oder "832*480" als String)
-          -1,                  // seed (-1 für Random)
-          "24"                 // duration/frames (als String oder Zahl, je nach Space)
+        // Da der offizielle Space asynchron arbeitet, nutzen wir client.submit() statt .predict()
+        const job = client.submit("/t2v_generation", [         
+          finalEnglishPrompt,  // Prompt Textbox
+          "832*480",           // Resolution Dropdown ("832*480" oder "480*832")
+          true,                // Watermark Checkbox (true/false)
+          -1,                  // Seed (-1 für Random)
         ]);
+
+        // Wir warten auf das finale Ergebnis des Gradio-Jobs
+        const result = await new Promise((resolve, reject) => {
+          job.on("status", (status) => {
+            if (status.stage === "error") {
+              reject(new Error(status.message || "Fehler in der HF-Warteschlange"));
+            }
+          });
+
+          job.on("data", (data) => {
+            resolve(data);
+          });
+        });
 
         let videoUrl = "";
         if (result.data && result.data[0]) {
-          // Gradio gibt meistens ein Objekt mit { url: "..." } zurück
+          // Das offizielle Modell liefert ein JSON-Objekt mit der URL zurück
           videoUrl = result.data[0].url || result.data[0];
         }
         
@@ -245,33 +259,13 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         }
         
         return res.json({ 
-          reply: `Hier ist dein generiertes Video für: **${prompt}** (Generiert mit dem hochmodernen Wan 2.1!)`, 
+          reply: `Hier ist dein generiertes Video für: **${prompt}** (Generiert mit dem offiziellen SOTA Wan 2.1 Modell! 🚀)`, 
           generatedVideo: videoUrl
         });
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Der Video-Space ist aktuell überlastet oder die Warteschlange ist zu lang. Bitte versuche es gleich noch einmal!" });
-      }
-
-        // Gradio gibt Daten meistens verschachtelt zurück, wir sichern uns hier ab
-        let videoUrl = "";
-        if (result.data && result.data[0]) {
-          videoUrl = result.data[0].url || result.data[0];
-        }
-        
-        if (!videoUrl) {
-          throw new Error("Keine Video-URL in den Resultat-Daten gefunden.");
-        }
-        
-        return res.json({ 
-          reply: `Hier ist dein generiertes Video für: **${prompt}** (Rendern über Alibaba-PAI abgeschlossen!)`, 
-          generatedVideo: videoUrl
-        });
-
-      } catch (videoErr) {
-        console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Die Video-KI ist aktuell überlastet, die Parameterstruktur hat sich geändert oder die Warteschlange auf Hugging Face ist zu lang. Bitte versuche es gleich noch einmal!" });
+        return res.json({ reply: "Der offizielle Wan-AI Space ist wegen der vielen Likes extrem ausgelastet oder die Warteschlange ist voll. Bitte versuche es in wenigen Augenblicken noch einmal!" });
       }
     }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
