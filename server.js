@@ -205,18 +205,27 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       let prompt = message.replace(/^\/video\s*/i, "").replace(/^generiere ein video\s*(von\s*)?/i, "");
       if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was im Video zu sehen sein soll!" });
 
-      // 1. Prompt übersetzen und optimieren
+      // 1. Prompt übersetzen und optimieren (Strikte Anweisung an Groq)
       let finalEnglishPrompt = prompt;
       try {
         const translationRes = await groq.chat.completions.create({
           model: "groq/compound",
           messages: [
-            { role: "system", content: "Translate the user's video prompt from German to English. Enhance it with cinematic keywords for high quality and smooth movement. Reply ONLY with the final English prompt." },
+            { 
+              role: "system", 
+              content: "You are a translation assistant. Translate the user prompt to English, optimize it with cinematic keywords for smooth motion. Crucial: Reply ONLY with the final prompt string. Do not include markdown headers, do not include reasoning, do not explain. Just the raw string." 
+            },
             { role: "user", content: prompt }
           ]
         });
-        const translatedText = translationRes.choices?.[0]?.message?.content?.trim();
-        if (translatedText) finalEnglishPrompt = translatedText;
+        
+        // Falls Groq doch Text drumherum baut, säubern wir ihn grob
+        let translatedText = translationRes.choices?.[0]?.message?.content?.trim();
+        if (translatedText) {
+          // Falls Groq Anführungszeichen mitsendet, entfernen wir sie
+          translatedText = translatedText.replace(/^["']|["']$/g, "");
+          finalEnglishPrompt = translatedText;
+        }
       } catch (transErr) {
         console.error("Translation failed, using original prompt:", transErr);
       }
@@ -226,34 +235,42 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         console.log(`🎬 Verbinde mit LTX2.3-Studio Space für: "${finalEnglishPrompt}"...`);
         const client = await Client.connect("nsfwalex/LTX2.3-Studio");
 
-        // Wir triggern den /handler Endpunkt mit den exakten 14 Parametern aus deiner Doku
         const result = await client.predict("/handler", { 		
-          param_0: finalEnglishPrompt, // Prompt Textbox
-          param_1: "Fast",              // Preset ("Fast", "Balanced" oder "Quality")
-          param_2: 768,                 // Width (Breitbild)
-          param_3: 512,                 // Height
-          param_4: 3,                   // Length in Sekunden
-          param_5: 24,                  // FPS (Bilder pro Sekunde)
-          param_6: 0,                   // Seed
-          param_7: true,                // Randomize seed each run (true/false)
-          param_8: "low quality, worst quality, deformed, blurry, watermark", // Negative prompt
-          param_9: "none",              // Camera movement
-          param_10: 0,                  // Camera strength
-          param_11: false,              // Apply IC-LoRA-Detailer
-          param_12: 0,                  // Detailer strength
-          param_13: "mp4",              // Output format
+          param_0: finalEnglishPrompt, 
+          param_1: "Fast",              // Verhindert Timeouts
+          param_2: 768,                 
+          param_3: 512,                 
+          param_4: 3,                   // 3 Sekunden
+          param_5: 24,                  
+          param_6: 0,                   
+          param_7: true,                
+          param_8: "low quality, worst quality, deformed, blurry, watermark", 
+          param_9: "none",              
+          param_10: 0,                  
+          param_11: false,              
+          param_12: 0,                  
+          param_13: "mp4",              
         });
 
+        // Debug-Log, um im Render-Log die genaue Antwort zu sehen, falls es hakt
+        console.log("📦 LTX API-Antwort empfangen:", JSON.stringify(result.data));
+
         let videoUrl = "";
-        // Laut Doku gibt das Array 3 Elemente zurück: [0] HTML, [1] Video-Komponente, [2] Progress-JSON
-        // Das Video steckt in Element [1]
-        if (result.data && result.data[1]) {
-          const videoData = result.data[1];
-          videoUrl = videoData.url || (typeof videoData === "string" ? videoData : "");
+        if (result.data && result.data.length > 0) {
+          // Wir suchen flexibel im Array nach einem Objekt mit einer .url Eigenschaft
+          for (const item of result.data) {
+            if (item && item.url) {
+              videoUrl = item.url;
+              break;
+            } else if (typeof item === "string" && item.startsWith("http")) {
+              videoUrl = item;
+              break;
+            }
+          }
         }
         
         if (!videoUrl) {
-          throw new Error("Keine Video-URL im Resultat von LTX 2.3 gefunden.");
+          throw new Error("Keine Video-URL in den empfangenen Daten gefunden.");
         }
         
         return res.json({ 
@@ -263,7 +280,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Der LTX 2.3-Space ist aktuell überlastet. Bitte versuche es gleich noch einmal!" });
+        return res.json({ reply: "Die Video-Generierung ist fehlgeschlagen oder der Space ist überlastet. Bitte versuche es gleich noch einmal!" });
       }
     }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
