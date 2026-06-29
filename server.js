@@ -231,8 +231,11 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       // 2. Video-Generierung via LTX 2.3 Studio (/handler)
       try {
         console.log(`🎬 Verbinde mit LTX2.3-Studio Space für: "${finalEnglishPrompt}"...`);
-        const client = await Client.connect("nsfwalex/LTX2.3-Studio");
-
+       // Vorher: const client = await Client.connect("nsfwalex/LTX2.3-Studio");
+// Nachher: Ersetze diese Zeile mit dem folgenden Code:
+const hfToken = process.env.HUGGINGFACE_API_KEY; // Je nachdem, wie du die Variable auf Render genannt hast
+const client = await Client.connect("nsfwalex/LTX2.3-Studio", hfToken ? { hf_token: hfToken } : {});
+       
         const result = await client.predict("/handler", { 		
           param_0: finalEnglishPrompt, 
           param_1: "Fast",              
