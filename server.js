@@ -231,16 +231,17 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       }
 
       // 2. Video-Generierung via LTX 2.3 Studio (/handler)
+   // 2. Video-Generierung via LTX 2.3 Studio (/handler)
       try {
         console.log(`🎬 Verbinde mit LTX2.3-Studio Space für: "${finalEnglishPrompt}"...`);
         const client = await Client.connect("nsfwalex/LTX2.3-Studio");
 
         const result = await client.predict("/handler", { 		
           param_0: finalEnglishPrompt, 
-          param_1: "Fast",              // Verhindert Timeouts
+          param_1: "Fast",              
           param_2: 768,                 
           param_3: 512,                 
-          param_4: 3,                   // 3 Sekunden
+          param_4: 3,                   
           param_5: 24,                  
           param_6: 0,                   
           param_7: true,                
@@ -252,17 +253,26 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
           param_13: "mp4",              
         });
 
-        // Debug-Log, um im Render-Log die genaue Antwort zu sehen, falls es hakt
         console.log("📦 LTX API-Antwort empfangen:", JSON.stringify(result.data));
 
         let videoUrl = "";
         if (result.data && result.data.length > 0) {
-          // Wir suchen flexibel im Array nach einem Objekt mit einer .url Eigenschaft
+          // Wir scannen alle zurückgegebenen Objekte extrem gründlich
           for (const item of result.data) {
-            if (item && item.url) {
+            if (!item) continue;
+
+            // FALL 1: Das Video ist verschachtelt (wie in deinem Log: item.video.url)
+            if (item.video && item.video.url) {
+              videoUrl = item.video.url;
+              break;
+            }
+            // FALL 2: Das Video liegt flach als url drin (item.url)
+            else if (item.url) {
               videoUrl = item.url;
               break;
-            } else if (typeof item === "string" && item.startsWith("http")) {
+            }
+            // FALL 3: Es kam ein direkter String-Link zurück
+            else if (typeof item === "string" && item.startsWith("http")) {
               videoUrl = item;
               break;
             }
@@ -274,7 +284,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         }
         
         return res.json({ 
-          reply: `Hier ist dein generiertes Video für: **${prompt}** (Echtzeit-Rendering mit LTX 2.3 abgeschlossen! ⚡)`, 
+          reply: `Hier ist dein generiertes Video für: **${prompt}** (LTX 2.3 Studio) ⚡`, 
           generatedVideo: videoUrl
         });
 
@@ -282,7 +292,6 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
         return res.json({ reply: "Die Video-Generierung ist fehlgeschlagen oder der Space ist überlastet. Bitte versuche es gleich noch einmal!" });
       }
-    }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
     let chatHistory = [];
     if (history) {
