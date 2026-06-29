@@ -206,6 +206,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was im Video zu sehen sein soll!" });
 
       // 1. Prompt übersetzen und optimieren
+     // 1. Prompt übersetzen und optimieren
       let finalEnglishPrompt = prompt;
       try {
         const translationRes = await groq.chat.completions.create({
@@ -213,7 +214,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
           messages: [
             { 
               role: "system", 
-              content: "You are a translation assistant. Translate the user prompt to English, optimize it with cinematic keywords for smooth motion. Crucial: Reply ONLY with the final prompt string. Do not include markdown headers, reasoning, explanations or multiple examples. Just the raw text." 
+              content: "You are a translation assistant. Translate the user prompt to English, optimize it with cinematic keywords for smooth motion. Crucial: Reply ONLY with the final prompt string. Do not include explanations, definitions, stories or multiple sentences. Just one short descriptive prompt sentence." 
             },
             { role: "user", content: prompt }
           ]
@@ -221,19 +222,30 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         
         let translatedText = translationRes.choices?.[0]?.message?.content?.trim() || "";
         
-        if (translatedText.includes("\n") || translatedText.toLowerCase().includes("translation")) {
-          const match = translatedText.match(/"([^"]+)"/i) || translatedText.match(/`([^`]+)`/i);
-          if (match && match[1]) {
-            translatedText = match[1];
-          } else {
-            const lines = translatedText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-            translatedText = lines[lines.length - 1].replace(/^[-*> ]*/, "");
+        // 🛠️ ULTRARADIKALER FILTER FÜR PROMPTS
+        // Falls Text in typografischen Anführungszeichen existiert (wie “flying cat”)
+        const smartMatch = translatedText.match(/[“"‘`]([^”“'`]+)[”"’`]/);
+        if (smartMatch && smartMatch[1] && smartMatch[1].length < 100) {
+          translatedText = smartMatch[1];
+        } else if (translatedText.includes(".") || translatedText.includes("\n")) {
+          // Falls Groq einen langen Absatz schreibt, schneiden wir einfach Eiskalt nach dem ALLERERSTEN Satz ab.
+          // Das verhindert ellenlange Textwände.
+          const firstSentence = translatedText.split(/[.!\n]/)[0].trim();
+          if (firstSentence.length > 5) {
+            translatedText = firstSentence;
           }
         }
 
+        // Bereinige den Text von verbleibendem Markdown-Ballast
         if (translatedText) {
-          finalEnglishPrompt = translatedText.replace(/[*'`"»«]/g, "").trim();
+          finalEnglishPrompt = translatedText.replace(/[“”*'`"»«]/g, "").trim();
         }
+        
+        // Letzte Sicherheitsbremse: Falls der Prompt immer noch viel zu lang ist, kürzen wir ihn hart
+        if (finalEnglishPrompt.length > 150) {
+          finalEnglishPrompt = finalEnglishPrompt.substring(0, 120) + ", cinematic smooth motion";
+        }
+
       } catch (transErr) {
         console.error("Translation failed, using original prompt:", transErr);
       }
