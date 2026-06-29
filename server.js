@@ -213,29 +213,47 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
           messages: [
             { 
               role: "system", 
-              content: "You are a translation assistant. Translate the user prompt to English, optimize it with cinematic keywords for smooth motion. Crucial: Reply ONLY with the final prompt string. Do not include markdown headers, do not include reasoning, do not explain. Just the raw string." 
+              content: "You are a translation assistant. Translate the user prompt to English, optimize it with cinematic keywords for smooth motion. Crucial: Reply ONLY with the final prompt string. Do not include markdown headers, reasoning, explanations or multiple examples. Just the raw text." 
             },
             { role: "user", content: prompt }
           ]
         });
         
-        let translatedText = translationRes.choices?.[0]?.message?.content?.trim();
+        let translatedText = translationRes.choices?.[0]?.message?.content?.trim() || "";
+        
+        // 🛠️ RADIKALER FILTER: Falls Groq wieder einen Roman schreibt, extrahieren wir nur die beste Zeile
+        if (translatedText.includes("\n") || translatedText.toLowerCase().includes("translation")) {
+          // Wir suchen nach typischen Mustern wie "“flying cat”" oder Zeilen mit Anführungszeichen
+          const match = translatedText.match(/"([^"]+)"/i) || translatedText.match(/`([^`]+)`/i);
+          if (match && match[1]) {
+            translatedText = match[1];
+          } else {
+            // Fallback: Nimm einfach die allerletzte nicht-leere Zeile (oft das Resultat)
+            const lines = translatedText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+            translatedText = lines[lines.length - 1].replace(/^[-*> ]*/, "");
+          }
+        }
+
         if (translatedText) {
-          translatedText = translatedText.replace(/^["']|["']$/g, "");
-          finalEnglishPrompt = translatedText;
+          finalEnglishPrompt = translatedText.replace(/[*'`"»«]/g, "").trim();
         }
       } catch (transErr) {
         console.error("Translation failed, using original prompt:", transErr);
       }
 
-      // 2. Video-Generierung via LTX 2.3 Studio (/handler)
+      // 2. Video-Generierung via LTX 2.3 Studio
       try {
+        // Falls der extrahierte Prompt zu kurz/leer wurde, setzen wir ein sauberes Fallback
+        if (finalEnglishPrompt.length < 3) finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
+
         console.log(`🎬 Verbinde mit LTX2.3-Studio Space für: "${finalEnglishPrompt}"...`);
-       // Vorher: const client = await Client.connect("nsfwalex/LTX2.3-Studio");
-// Nachher: Ersetze diese Zeile mit dem folgenden Code:
-const hfToken = process.env.HUGGINGFACE_API_KEY; // Je nachdem, wie du die Variable auf Render genannt hast
-const client = await Client.connect("nsfwalex/LTX2.3-Studio", hfToken ? { hf_token: hfToken } : {});
-       
+        
+        // 🔑 HIER REICHEN WIR DEN TOKEN DIREKT BEIM CONNECT MIT EIN!
+        const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
+        
+        // Gradio erwartet den Token bei privaten/gated Spaces direkt als zweiten String-Parameter oder im Options-Objekt
+        const client = await Client.connect("nsfwalex/LTX2.3-Studio", hfToken ? { hf_token: hfToken } : {});
+
         const result = await client.predict("/handler", { 		
           param_0: finalEnglishPrompt, 
           param_1: "Fast",              
@@ -259,17 +277,13 @@ const client = await Client.connect("nsfwalex/LTX2.3-Studio", hfToken ? { hf_tok
         if (result.data && result.data.length > 0) {
           for (const item of result.data) {
             if (!item) continue;
-
-            // Holt die URL aus dem verschachtelten video-Objekt
             if (item.video && item.video.url) {
               videoUrl = item.video.url;
               break;
-            }
-            else if (item.url) {
+            } else if (item.url) {
               videoUrl = item.url;
               break;
-            }
-            else if (typeof item === "string" && item.startsWith("http")) {
+            } else if (typeof item === "string" && item.startsWith("http")) {
               videoUrl = item;
               break;
             }
@@ -281,13 +295,13 @@ const client = await Client.connect("nsfwalex/LTX2.3-Studio", hfToken ? { hf_tok
         }
         
         return res.json({ 
-          reply: `Hier ist dein generiertes Video für: **${prompt}** (LTX 2.3 Studio) ⚡`, 
+          reply: `Hier ist dein generiertes Video für: **${prompt}** ⚡`, 
           generatedVideo: videoUrl
         });
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Die Video-Generierung ist fehlgeschlagen oder der Space ist überlastet. Bitte versuche es gleich noch einmal!" });
+        return res.json({ reply: "Die Video-Generierung ist fehlgeschlagen. Der Space ist temporär nicht erreichbar oder gesperrt." });
       }
     }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
