@@ -199,7 +199,7 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     }
 
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
-    const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("generiere ein video");
+const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("generiere ein video");
 
     if (isVideoGeneration) {
       let prompt = message.replace(/^\/video\s*/i, "").replace(/^generiere ein video\s*(von\s*)?/i, "");
@@ -222,46 +222,52 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       try {
         console.log(`🎬 Verbinde mit Alibaba CogVideoX Space für: "${finalEnglishPrompt}"...`);
         const client = await Client.connect("alibaba-pai/CogVideoX-Fun-5b");
-        const emptyBlob = new Blob([]);
 
-        // 2. /generate Endpunkt mit deinen exakten 21 Parametern triggern
-        const result = await client.predict("/generate", { 		
-          diffusion_transformer_dropdown: "models/Diffusion_Transformer/CogVideoX-Fun-V1.1-5b-InP", 		
-          base_model_dropdown: "none", 		
-          lora_model_dropdown: "none", 		
-          lora_alpha_slider: 0, 		
-          prompt_textbox: finalEnglishPrompt, 		
-          negative_prompt_textbox: "The video is not of a high quality, it has a low resolution. Watermark present in each frame. Distortion.", 		
-          sampler_dropdown: "Euler", 		
-          sample_step_slider: 50, 		
-          resize_method: "Generate by", 		
-          width_slider: 672, 		
-          height_slider: 384, 		
-          base_resolution: "512", 		
-          generation_method: "Video Generation", 		
-          length_slider: 25, // 25 Frames für eine solide Render-Dauer
-          cfg_scale_slider: 6, 
-          start_image: emptyBlob, 
-          end_image: emptyBlob, 
-          validation_video: null, 
-          validation_video_mask: emptyBlob, 		
-          denoise_strength: 0.7, 		
-          seed_textbox: String(Math.floor(Math.random() * 100000)), 
-        });
+        // 2. Parameter als exaktes Array übergeben (Reihenfolge ist entscheidend!)
+        const result = await client.predict("/generate", [         
+          "models/Diffusion_Transformer/CogVideoX-Fun-V1.1-5b-InP", // diffusion_transformer_dropdown
+          "none",                                                   // base_model_dropdown
+          "none",                                                   // lora_model_dropdown
+          0,                                                        // lora_alpha_slider
+          finalEnglishPrompt,                                       // prompt_textbox
+          "The video is not of a high quality, it has a low resolution. Watermark present in each frame. Distortion.", // negative_prompt_textbox
+          "Euler",                                                  // sampler_dropdown
+          50,                                                       // sample_step_slider
+          "Generate by",                                            // resize_method
+          672,                                                      // width_slider
+          384,                                                      // height_slider
+          "512",                                                    // base_resolution
+          "Video Generation",                                       // generation_method
+          25,                                                       // length_slider (Frames)
+          6,                                                        // cfg_scale_slider
+          null,                                                     // start_image (null statt leerer Blob)
+          null,                                                     // end_image (null)
+          null,                                                     // validation_video
+          null,                                                     // validation_video_mask
+          0.7,                                                      // denoise_strength
+          String(Math.floor(Math.random() * 100000)),               // seed_textbox
+        ]);
 
-        const videoUrl = result.data[0]?.url || result.data[0];
+        // Gradio gibt Daten meistens verschachtelt zurück, wir sichern uns hier ab
+        let videoUrl = "";
+        if (result.data && result.data[0]) {
+          videoUrl = result.data[0].url || result.data[0];
+        }
+        
+        if (!videoUrl) {
+          throw new Error("Keine Video-URL in den Resultat-Daten gefunden.");
+        }
         
         return res.json({ 
           reply: `Hier ist dein generiertes Video für: **${prompt}** (Rendern über Alibaba-PAI abgeschlossen!)`, 
-          generatedVideo: videoUrl // Dein Frontend muss dieses Feld auswerten, um ein <video> anzuzeigen!
+          generatedVideo: videoUrl
         });
 
       } catch (videoErr) {
-        console.error("❌ Video-Generierungsfehler:", videoErr.message);
-        return res.json({ reply: "Die Video-KI ist aktuell überlastet oder die Warteschlange auf Hugging Face ist zu lang. Bitte versuche es gleich noch einmal!" });
+        console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
+        return res.json({ reply: "Die Video-KI ist aktuell überlastet, die Parameterstruktur hat sich geändert oder die Warteschlange auf Hugging Face ist zu lang. Bitte versuche es gleich noch einmal!" });
       }
     }
-
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
     let chatHistory = [];
     if (history) {
