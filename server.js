@@ -8,6 +8,7 @@ import Groq from "groq-sdk";
 import pdfParse from "pdf-parse";
 import axios from "axios";
 import OpenAI from "openai";
+import { Client } from "@gradio/client"; // <-- Wichtig: Gradio Client für die Video-KI
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 const nvidiaClient = new OpenAI({
-  apiKey: process.env.NVIDIA_API_KEY,
+  apiKey: process.env.NVIDIA_API_KEY || "dummy_key_until_env_loads",
   baseURL: 'https://integrate.api.nvidia.com/v1',
 });
 
@@ -43,7 +44,7 @@ function trimHistory(history) {
   return history.slice(-6);
 }
 
-// 4-stufige intelligente KI-Kaskade (DeepSeek -> GLM -> Liquid OSS -> Llama Backup)
+// 4-stufige intelligente KI-Kaskade (Groq -> Backup)
 async function runLLM(messages) {
   // --- STUFE 1: GROQ COMPOUND (Dein primäres Hauptmodell) ---
   try {
@@ -69,7 +70,7 @@ async function runLLM(messages) {
   } catch (fallbackErr) {
     console.error("❌ Auch das Fallback-Modell ist gescheitert:", fallbackErr.message);
     
-    if (err.message.includes("large") || fallbackErr.message.includes("large")) {
+    if (fallbackErr.message.includes("large")) {
       return "Das hochgeladene Dokument enthält leider zu viel Text für die KI. Bitte versuche es mit einer kleineren Datei.";
     }
     return "Der Server ist aktuell stark überlastet. Bitte versuche es in wenigen Sekunden noch einmal.";
@@ -94,7 +95,7 @@ app.post("/transcribe", upload.single("audio"), async (req, res) => {
   }
 });
 
-// CHAT ROUTE
+// CHAT ROUTE (Inklusive Wetter, Krypto, Wiki, Bild- und Video-Generierung)
 app.post("/chat", upload.single("image"), async (req, res) => {
   try {
     const { message, history } = req.body;
@@ -195,6 +196,70 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         reply: `Hier ist dein generiertes Bild für: **${prompt}**`, 
         generatedImage: generatedImageUrl 
       });
+    }
+
+    // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
+    const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("generiere ein video");
+
+    if (isVideoGeneration) {
+      let prompt = message.replace(/^\/video\s*/i, "").replace(/^generiere ein video\s*(von\s*)?/i, "");
+      if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was im Video zu sehen sein soll!" });
+
+      // 1. Prompt übersetzen und optimieren
+      let finalEnglishPrompt = prompt;
+      try {
+        const translationRes = await groq.chat.completions.create({
+          model: "groq/compound",
+          messages: [
+            { role: "system", content: "Translate the user's video prompt from German to English. Enhance it with cinematic keywords for high quality and smooth movement. Reply ONLY with the final English prompt." },
+            { role: "user", content: prompt }
+          ]
+        });
+        const translatedText = translationRes.choices?.[0]?.message?.content?.trim();
+        if (translatedText) finalEnglishPrompt = translatedText;
+      } catch {}
+
+      try {
+        console.log(`🎬 Verbinde mit Alibaba CogVideoX Space für: "${finalEnglishPrompt}"...`);
+        const client = await Client.connect("alibaba-pai/CogVideoX-Fun-5b");
+        const emptyBlob = new Blob([]);
+
+        // 2. /generate Endpunkt mit deinen exakten 21 Parametern triggern
+        const result = await client.predict("/generate", { 		
+          diffusion_transformer_dropdown: "models/Diffusion_Transformer/CogVideoX-Fun-V1.1-5b-InP", 		
+          base_model_dropdown: "none", 		
+          lora_model_dropdown: "none", 		
+          lora_alpha_slider: 0, 		
+          prompt_textbox: finalEnglishPrompt, 		
+          negative_prompt_textbox: "The video is not of a high quality, it has a low resolution. Watermark present in each frame. Distortion.", 		
+          sampler_dropdown: "Euler", 		
+          sample_step_slider: 50, 		
+          resize_method: "Generate by", 		
+          width_slider: 672, 		
+          height_slider: 384, 		
+          base_resolution: "512", 		
+          generation_method: "Video Generation", 		
+          length_slider: 25, // 25 Frames für eine solide Render-Dauer
+          cfg_scale_slider: 6, 
+          start_image: emptyBlob, 
+          end_image: emptyBlob, 
+          validation_video: null, 
+          validation_video_mask: emptyBlob, 		
+          denoise_strength: 0.7, 		
+          seed_textbox: String(Math.floor(Math.random() * 100000)), 
+        });
+
+        const videoUrl = result.data[0]?.url || result.data[0];
+        
+        return res.json({ 
+          reply: `Hier ist dein generiertes Video für: **${prompt}** (Rendern über Alibaba-PAI abgeschlossen!)`, 
+          generatedVideo: videoUrl // Dein Frontend muss dieses Feld auswerten, um ein <video> anzuzeigen!
+        });
+
+      } catch (videoErr) {
+        console.error("❌ Video-Generierungsfehler:", videoErr.message);
+        return res.json({ reply: "Die Video-KI ist aktuell überlastet oder die Warteschlange auf Hugging Face ist zu lang. Bitte versuche es gleich noch einmal!" });
+      }
     }
 
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
