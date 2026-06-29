@@ -242,48 +242,56 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       }
 
       // 2. Video-Generierung via LTX 2.3 Studio
+    // 2. Video-Generierung via techfreakworm/LTX2.3-Studio (Blackwell GPUs)
       try {
-        // Falls der extrahierte Prompt zu kurz/leer wurde, setzen wir ein sauberes Fallback
         if (finalEnglishPrompt.length < 3) finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
 
-        console.log(`🎬 Verbinde mit LTX2.3-Studio Space für: "${finalEnglishPrompt}"...`);
+        const spaceId = "techfreakworm/LTX2.3-Studio";
+        console.log(`🎬 Verbinde mit ${spaceId} für: "${finalEnglishPrompt}"...`);
         
-        // 🔑 HIER REICHEN WIR DEN TOKEN DIREKT BEIM CONNECT MIT EIN!
-        const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
+        // Token aus den Render-Umgebungsvariablen ziehen
+        const hfToken = process.env.HUGGINGFACE_API_KEY; 
         
-        // Gradio erwartet den Token bei privaten/gated Spaces direkt als zweiten String-Parameter oder im Options-Objekt
-        const client = await Client.connect("nsfwalex/LTX2.3-Studio", hfToken ? { hf_token: hfToken } : {});
+        // Verbindung zum neuen Space mit Token-Authentifizierung aufbauen
+        const client = await Client.connect(spaceId, hfToken ? { token: hfToken } : {});
 
+        // Exakte Parameterübergabe laut bereitgestellter API-Doku (13 Parameter)
         const result = await client.predict("/handler", { 		
-          param_0: finalEnglishPrompt, 
-          param_1: "Fast",              
-          param_2: 768,                 
-          param_3: 512,                 
-          param_4: 3,                   
-          param_5: 24,                  
-          param_6: 0,                   
-          param_7: true,                
-          param_8: "low quality, worst quality, deformed, blurry, watermark", 
-          param_9: "none",              
-          param_10: 0,                  
-          param_11: false,              
-          param_12: 0,                  
-          param_13: "mp4",              
+          param_0: finalEnglishPrompt, // Dein optimierter Prompt
+          param_1: "Fast",              // Preset
+          param_2: 768,                 // Width (Laut LTX am besten 768)
+          param_3: 512,                 // Height
+          param_4: 3,                   // Länge in Sekunden
+          param_5: 24,                  // FPS
+          param_6: 42,                  // Seed
+          param_7: true,                // Randomize seed
+          param_8: "low quality, worst quality, deformed, blurry, watermark", // Negative Prompt
+          param_9: "none",              // Camera movement
+          param_10: 0,                  // Camera strength
+          param_11: false,              // Apply IC-LoRA-Detailer
+          param_12: 0,                  // Detailer strength
         });
 
         console.log("📦 LTX API-Antwort empfangen:", JSON.stringify(result.data));
 
         let videoUrl = "";
         if (result.data && result.data.length > 0) {
+          // Wir durchsuchen das Ergebnis-Array nach der Video-URL
           for (const item of result.data) {
             if (!item) continue;
+            
+            // Fall 1: Verschachteltes Video-Objekt
             if (item.video && item.video.url) {
               videoUrl = item.video.url;
               break;
-            } else if (item.url) {
+            } 
+            // Fall 2: Flache URL im Objekt
+            else if (item.url) {
               videoUrl = item.url;
               break;
-            } else if (typeof item === "string" && item.startsWith("http")) {
+            } 
+            // Fall 3: Direkter String-Link
+            else if (typeof item === "string" && item.startsWith("http")) {
               videoUrl = item;
               break;
             }
@@ -295,15 +303,14 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         }
         
         return res.json({ 
-          reply: `Hier ist dein generiertes Video für: **${prompt}** ⚡`, 
+          reply: `Hier ist dein generiertes Video von den Blackwell-Maschinen für: **${prompt}** ⚡`, 
           generatedVideo: videoUrl
         });
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Die Video-Generierung ist fehlgeschlagen. Der Space ist temporär nicht erreichbar oder gesperrt." });
+        return res.json({ reply: "Die Video-Generierung auf dem Blackwell-Server ist fehlgeschlagen. Eventuell ist der Space im Sleep-Modus." });
       }
-    }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
     let chatHistory = [];
     if (history) {
