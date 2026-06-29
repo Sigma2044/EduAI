@@ -219,34 +219,40 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         if (translatedText) finalEnglishPrompt = translatedText;
       } catch {}
 
-      try {
-        console.log(`🎬 Verbinde mit Alibaba CogVideoX Space für: "${finalEnglishPrompt}"...`);
-        const client = await Client.connect("alibaba-pai/CogVideoX-Fun-5b");
+    try {
+        console.log(`🎬 Verbinde mit Wan2.1 Fast Space für: "${finalEnglishPrompt}"...`);
+        
+        // Verbindung zum schnellen Wan 2.1 Space
+        const client = await Client.connect("ysharma/wan2-1-fast");
 
-        // 2. Parameter als exaktes Array übergeben (Reihenfolge ist entscheidend!)
-        const result = await client.predict("/generate", [         
-          "models/Diffusion_Transformer/CogVideoX-Fun-V1.1-5b-InP", // diffusion_transformer_dropdown
-          "none",                                                   // base_model_dropdown
-          "none",                                                   // lora_model_dropdown
-          0,                                                        // lora_alpha_slider
-          finalEnglishPrompt,                                       // prompt_textbox
-          "The video is not of a high quality, it has a low resolution. Watermark present in each frame. Distortion.", // negative_prompt_textbox
-          "Euler",                                                  // sampler_dropdown
-          50,                                                       // sample_step_slider
-          "Generate by",                                            // resize_method
-          672,                                                      // width_slider
-          384,                                                      // height_slider
-          "512",                                                    // base_resolution
-          "Video Generation",                                       // generation_method
-          25,                                                       // length_slider (Frames)
-          6,                                                        // cfg_scale_slider
-          null,                                                     // start_image (null statt leerer Blob)
-          null,                                                     // end_image (null)
-          null,                                                     // validation_video
-          null,                                                     // validation_video_mask
-          0.7,                                                      // denoise_strength
-          String(Math.floor(Math.random() * 100000)),               // seed_textbox
+        // Wan2.1 Fast benötigt typischerweise nur diese 5 klaren Parameter
+        const result = await client.predict("/predict", [         
+          finalEnglishPrompt,  // prompt (dein optimierter englischer Text)
+          4,                   // num_inference_steps (Fast-Versionen brauchen oft nur 4-8 Steps!)
+          "480*832",           // resolution (z.B. "480*832" oder "832*480" als String)
+          -1,                  // seed (-1 für Random)
+          "24"                 // duration/frames (als String oder Zahl, je nach Space)
         ]);
+
+        let videoUrl = "";
+        if (result.data && result.data[0]) {
+          // Gradio gibt meistens ein Objekt mit { url: "..." } zurück
+          videoUrl = result.data[0].url || result.data[0];
+        }
+        
+        if (!videoUrl) {
+          throw new Error("Keine Video-URL im Resultat von Wan2.1 gefunden.");
+        }
+        
+        return res.json({ 
+          reply: `Hier ist dein generiertes Video für: **${prompt}** (Generiert mit dem hochmodernen Wan 2.1!)`, 
+          generatedVideo: videoUrl
+        });
+
+      } catch (videoErr) {
+        console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
+        return res.json({ reply: "Der Video-Space ist aktuell überlastet oder die Warteschlange ist zu lang. Bitte versuche es gleich noch einmal!" });
+      }
 
         // Gradio gibt Daten meistens verschachtelt zurück, wir sichern uns hier ab
         let videoUrl = "";
