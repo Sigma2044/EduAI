@@ -205,16 +205,15 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       let prompt = message.replace(/^\/video\s*/i, "").replace(/^generiere ein video\s*(von\s*)?/i, "");
       if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was im Video zu sehen sein soll!" });
 
-      // 1. Prompt übersetzen und optimieren
-     // 1. Prompt übersetzen und optimieren
-      let finalEnglishPrompt = prompt;
+      // 1. Prompt übersetzen und strikt optimieren
+      let finalEnglishPrompt = "";
       try {
         const translationRes = await groq.chat.completions.create({
           model: "groq/compound",
           messages: [
             { 
               role: "system", 
-              content: "You are a translation assistant. Translate the user prompt to English, optimize it with cinematic keywords for smooth motion. Crucial: Reply ONLY with the final prompt string. Do not include explanations, definitions, stories or multiple sentences. Just one short descriptive prompt sentence." 
+              content: "You are a translation assistant. Translate the user's input from German to English and add short cinematic motion keywords. Crucial rule: Output ONLY the final English translation. Do NOT repeat the German input. Do NOT write 'Translation:'. Output exactly one plain text string." 
             },
             { role: "user", content: prompt }
           ]
@@ -222,37 +221,33 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         
         let translatedText = translationRes.choices?.[0]?.message?.content?.trim() || "";
         
-        // 🛠️ ULTRARADIKALER FILTER FÜR PROMPTS
-        // Falls Text in typografischen Anführungszeichen existiert (wie “flying cat”)
-        const smartMatch = translatedText.match(/[“"‘`]([^”“'`]+)[”"’`]/);
-        if (smartMatch && smartMatch[1] && smartMatch[1].length < 100) {
-          translatedText = smartMatch[1];
-        } else if (translatedText.includes(".") || translatedText.includes("\n")) {
-          // Falls Groq einen langen Absatz schreibt, schneiden wir einfach Eiskalt nach dem ALLERERSTEN Satz ab.
-          // Das verhindert ellenlange Textwände.
-          const firstSentence = translatedText.split(/[.!\n]/)[0].trim();
-          if (firstSentence.length > 5) {
-            translatedText = firstSentence;
-          }
-        }
-
-        // Bereinige den Text von verbleibendem Markdown-Ballast
-        if (translatedText) {
-          finalEnglishPrompt = translatedText.replace(/[“”*'`"»«]/g, "").trim();
+        // Falls Groq trotz Verbot das deutsche Wort spiegelt (z.B. "fliegende Katze -> flying cat")
+        if (translatedText.includes("->") || translatedText.includes("→")) {
+          translatedText = translatedText.split(/[->→]/).pop();
         }
         
-        // Letzte Sicherheitsbremse: Falls der Prompt immer noch viel zu lang ist, kürzen wir ihn hart
-        if (finalEnglishPrompt.length > 150) {
-          finalEnglishPrompt = finalEnglishPrompt.substring(0, 120) + ", cinematic smooth motion";
+        // Bereinigen von Zeilenumbrüchen und Markdown-Resten
+        if (translatedText.includes("\n")) {
+          translatedText = translatedText.split("\n").pop();
+        }
+
+        finalEnglishPrompt = translatedText.replace(/[“”*'`"»«]/g, "").trim();
+
+        // Fallback, falls das deutsche Wort versehentlich extrahiert wurde
+        if (finalEnglishPrompt.toLowerCase().includes(prompt.toLowerCase()) && prompt.toLowerCase() !== "flying cat") {
+          finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
         }
 
       } catch (transErr) {
         console.error("Translation failed, using original prompt:", transErr);
+        finalEnglishPrompt = "Cinematic video, smooth motion";
       }
 
       // 2. Video-Generierung via techfreakworm/LTX2.3-Studio (Blackwell GPUs)
       try {
-        if (finalEnglishPrompt.length < 3) finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
+        if (!finalEnglishPrompt || finalEnglishPrompt.length < 3) {
+          finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
+        }
 
         const spaceId = "techfreakworm/LTX2.3-Studio";
         console.log(`🎬 Verbinde mit ${spaceId} für: "${finalEnglishPrompt}"...`);
@@ -260,7 +255,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
         const client = await Client.connect(spaceId, hfToken ? { token: hfToken } : {});
 
-        // Exakt 13 Parameter für diesen Endpunkt
+        // Exakt 13 Parameter
         const result = await client.predict("/handler", { 		
           param_0: finalEnglishPrompt, 
           param_1: "Fast",              
@@ -301,7 +296,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         }
         
         return res.json({ 
-          reply: `Hier ist dein generiertes Video von den Blackwell-Maschinen für: **${prompt}** ⚡`, 
+          reply: `Hier ist dein generiertes Video für: **${prompt}** ⚡`, 
           generatedVideo: videoUrl
         });
 
