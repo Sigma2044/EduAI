@@ -221,63 +221,49 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         console.error("Translation failed, using original prompt:", transErr);
       }
 
-      // 2. Video-Generierung via Wan2.1 Asynchronem Prozess + Status Check
+      // 2. Video-Generierung via LTX 2.3 Studio (/handler)
       try {
-        console.log(`🎬 Verbinde mit modernem Wan-AI Space für: "${finalEnglishPrompt}"...`);
-        const client = await Client.connect("Wan-AI/Wan2.1");
+        console.log(`🎬 Verbinde mit LTX2.3-Studio Space für: "${finalEnglishPrompt}"...`);
+        const client = await Client.connect("nsfwalex/LTX2.3-Studio");
 
-        // Schritt A: Starte die asynchrone Generierung (wie in der Doku vorgegeben)
-        // Schritt A: Starte die asynchrone Generierung (mit gültiger Auflösung)
-        console.log("⏳ Starte Generierungs-Task auf Hugging Face...");
-        await client.predict("/t2v_generation_async", { 		
-          prompt: finalEnglishPrompt, 		
-          size: "1280*720", // <- Geändert auf eine von der API erlaubte Breitbild-Auflösung
-          watermark_wan: true, 		
-          seed: -1, 
+        // Wir triggern den /handler Endpunkt mit den exakten 14 Parametern aus deiner Doku
+        const result = await client.predict("/handler", { 		
+          param_0: finalEnglishPrompt, // Prompt Textbox
+          param_1: "Fast",              // Preset ("Fast", "Balanced" oder "Quality")
+          param_2: 768,                 // Width (Breitbild)
+          param_3: 512,                 // Height
+          param_4: 3,                   // Length in Sekunden
+          param_5: 24,                  // FPS (Bilder pro Sekunde)
+          param_6: 0,                   // Seed
+          param_7: true,                // Randomize seed each run (true/false)
+          param_8: "low quality, worst quality, deformed, blurry, watermark", // Negative prompt
+          param_9: "none",              // Camera movement
+          param_10: 0,                  // Camera strength
+          param_11: false,              // Apply IC-LoRA-Detailer
+          param_12: 0,                  // Detailer strength
+          param_13: "mp4",              // Output format
         });
 
-        // Schritt B: Polling-Schleife. Wir fragen den Status ab, bis ein Video da ist.
         let videoUrl = "";
-        let attempts = 0;
-        const maxAttempts = 30; // Max 30 Versuche (30 * 4 Sekunden = 120 Sekunden maximale Wartezeit)
-
-        console.log("🔄 Video wird gerendert. Warte auf Fertigstellung...");
-        
-        while (!videoUrl && attempts < maxAttempts) {
-          // Warte 4 Sekunden zwischen den Abfragen, um die HF-API nicht zu DDOSen
-          await new Promise(resolve => setTimeout(resolve, 4000));
-          attempts++;
-
-          try {
-            const statusResult = await client.predict("/status_refresh", {});
-            
-            // Laut Doku: [0] ist das Video-Element (Objekt mit .url oder direkt ein String)
-            if (statusResult.data && statusResult.data[0]) {
-              const dataObj = statusResult.data[0];
-              videoUrl = dataObj.url || (typeof dataObj === "string" ? dataObj : "");
-              
-              if (videoUrl) {
-                console.log(`✨ Video erfolgreich generiert nach Versuch ${attempts}!`);
-                break;
-              }
-            }
-          } catch (pollErr) {
-            console.log("Warte auf Queue-Freigabe...");
-          }
+        // Laut Doku gibt das Array 3 Elemente zurück: [0] HTML, [1] Video-Komponente, [2] Progress-JSON
+        // Das Video steckt in Element [1]
+        if (result.data && result.data[1]) {
+          const videoData = result.data[1];
+          videoUrl = videoData.url || (typeof videoData === "string" ? videoData : "");
         }
-
+        
         if (!videoUrl) {
-          throw new Error("Das Rendern dauert zu lange (Timeout) oder die Warteschlange ist blockiert.");
+          throw new Error("Keine Video-URL im Resultat von LTX 2.3 gefunden.");
         }
         
         return res.json({ 
-          reply: `Hier ist dein generiertes Video für: **${prompt}** (Generiert mit dem offiziellen Wan 2.1 Modell! 🚀)`, 
+          reply: `Hier ist dein generiertes Video für: **${prompt}** (Echtzeit-Rendering mit LTX 2.3 abgeschlossen! ⚡)`, 
           generatedVideo: videoUrl
         });
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Der offizielle Wan-AI Space ist aktuell überlastet oder das Rendern hat das Zeitlimit überschritten. Bitte versuche es gleich noch einmal!" });
+        return res.json({ reply: "Der LTX 2.3-Space ist aktuell überlastet. Bitte versuche es gleich noch einmal!" });
       }
     }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
