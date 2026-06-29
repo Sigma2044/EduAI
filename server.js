@@ -45,43 +45,19 @@ function trimHistory(history) {
 
 // 4-stufige intelligente KI-Kaskade (DeepSeek -> GLM -> Liquid OSS -> Llama Backup)
 async function runLLM(messages) {
-  // --- STUFE 1: DEEPSEEK V4 FLASH ---
+ // --- STUFE 1: NVIDIA NEMOTRON-3 ULTRA 550B (Hauptmodell) ---
   try {
-    console.log("🤖 Stufe 1: DeepSeek V4 Flash wird angefragt...");
+    console.log("🚀 Stufe 1: Nvidia Nemotron-3 Ultra wird angefragt...");
     const completion = await nvidiaClient.chat.completions.create({
-      model: "deepseek-ai/deepseek-v4-flash",
+      model: "nvidia/nemotron-3-ultra-550b-a55b",
       messages: messages,
-      temperature: 1,
-      top_p: 0.95,
-      max_tokens: 16384,
-      chat_template_kwargs: { "thinking": true, "reasoning_effort": "high" },
-      stream: false
-    });
-    
-    const reasoning = completion.choices[0]?.message?.reasoning || completion.choices[0]?.message?.reasoning_content;
-    if (reasoning) {
-      console.log(`🧠 DeepSeek Thinking:\n${reasoning}`);
-    }
-    
-    return completion.choices[0]?.message?.content;
-  } catch (err) {
-    console.warn("⚠️ Stufe 1 (DeepSeek) fehlgeschlagen:", err.message);
-  }
-
-  // --- STUFE 2: GLM 5.1 ---
-  try {
-    console.log("🔄 Stufe 2: Wechsle auf GLM 5.1...");
-    const completion = await nvidiaClient.chat.completions.create({
-      model: "z-ai/glm-5.1",
-      messages: messages,
-      temperature: 1,
-      top_p: 1,
-      max_tokens: 16384,
+      temperature: 0.7,
+      max_tokens: 4096,
       stream: false
     });
     return completion.choices[0]?.message?.content;
   } catch (err) {
-    console.warn("⚠️ Stufe 2 (GLM 5.1) fehlgeschlagen:", err.message);
+    console.warn("⚠️ Stufe 1 (Nemotron Ultra) fehlgeschlagen. Wechsle auf DeepSeek...");
   }
 
   // --- STUFE 3: LIQUID LFM-140B (GPT-OSS Alternative) ---
