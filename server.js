@@ -227,12 +227,13 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         const client = await Client.connect("Wan-AI/Wan2.1");
 
         // Schritt A: Starte die asynchrone Generierung (wie in der Doku vorgegeben)
+        // Schritt A: Starte die asynchrone Generierung (mit gültiger Auflösung)
         console.log("⏳ Starte Generierungs-Task auf Hugging Face...");
         await client.predict("/t2v_generation_async", { 		
           prompt: finalEnglishPrompt, 		
-          size: "832*480", // Unterstützte Auflösung laut UI
+          size: "1280*720", // <- Geändert auf eine von der API erlaubte Breitbild-Auflösung
           watermark_wan: true, 		
-          seed: -1, // -1 für zufälligen Seed
+          seed: -1, 
         });
 
         // Schritt B: Polling-Schleife. Wir fragen den Status ab, bis ein Video da ist.
