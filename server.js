@@ -205,7 +205,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       let prompt = message.replace(/^\/video\s*/i, "").replace(/^generiere ein video\s*(von\s*)?/i, "");
       if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was im Video zu sehen sein soll!" });
 
-      // 1. Prompt übersetzen und optimieren (Strikte Anweisung an Groq)
+      // 1. Prompt übersetzen und optimieren
       let finalEnglishPrompt = prompt;
       try {
         const translationRes = await groq.chat.completions.create({
@@ -219,10 +219,8 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
           ]
         });
         
-        // Falls Groq doch Text drumherum baut, säubern wir ihn grob
         let translatedText = translationRes.choices?.[0]?.message?.content?.trim();
         if (translatedText) {
-          // Falls Groq Anführungszeichen mitsendet, entfernen wir sie
           translatedText = translatedText.replace(/^["']|["']$/g, "");
           finalEnglishPrompt = translatedText;
         }
@@ -231,7 +229,6 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       }
 
       // 2. Video-Generierung via LTX 2.3 Studio (/handler)
-   // 2. Video-Generierung via LTX 2.3 Studio (/handler)
       try {
         console.log(`🎬 Verbinde mit LTX2.3-Studio Space für: "${finalEnglishPrompt}"...`);
         const client = await Client.connect("nsfwalex/LTX2.3-Studio");
@@ -257,21 +254,18 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
 
         let videoUrl = "";
         if (result.data && result.data.length > 0) {
-          // Wir scannen alle zurückgegebenen Objekte extrem gründlich
           for (const item of result.data) {
             if (!item) continue;
 
-            // FALL 1: Das Video ist verschachtelt (wie in deinem Log: item.video.url)
+            // Holt die URL aus dem verschachtelten video-Objekt
             if (item.video && item.video.url) {
               videoUrl = item.video.url;
               break;
             }
-            // FALL 2: Das Video liegt flach als url drin (item.url)
             else if (item.url) {
               videoUrl = item.url;
               break;
             }
-            // FALL 3: Es kam ein direkter String-Link zurück
             else if (typeof item === "string" && item.startsWith("http")) {
               videoUrl = item;
               break;
@@ -292,6 +286,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
         return res.json({ reply: "Die Video-Generierung ist fehlgeschlagen oder der Space ist überlastet. Bitte versuche es gleich noch einmal!" });
       }
+    }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
     let chatHistory = [];
     if (history) {
