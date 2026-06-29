@@ -218,54 +218,65 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         const translatedText = translationRes.choices?.[0]?.message?.content?.trim();
         if (translatedText) finalEnglishPrompt = translatedText;
       } catch (transErr) {
-        console.error("Translation failed:", transErr);
+        console.error("Translation failed, using original prompt:", transErr);
       }
 
-      // 2. Video-Generierung über den offiziellen Wan-AI/Wan2.1 Space
+      // 2. Video-Generierung via Wan2.1 Asynchronem Prozess + Status Check
       try {
-        console.log(`🎬 Verbinde mit offiziellem Wan-AI Space für: "${finalEnglishPrompt}"...`);
-        
+        console.log(`🎬 Verbinde mit modernem Wan-AI Space für: "${finalEnglishPrompt}"...`);
         const client = await Client.connect("Wan-AI/Wan2.1");
 
-        // Da der offizielle Space asynchron arbeitet, nutzen wir client.submit() statt .predict()
-        const job = client.submit("/t2v_generation", [         
-          finalEnglishPrompt,  // Prompt Textbox
-          "832*480",           // Resolution Dropdown ("832*480" oder "480*832")
-          true,                // Watermark Checkbox (true/false)
-          -1,                  // Seed (-1 für Random)
-        ]);
-
-        // Wir warten auf das finale Ergebnis des Gradio-Jobs
-        const result = await new Promise((resolve, reject) => {
-          job.on("status", (status) => {
-            if (status.stage === "error") {
-              reject(new Error(status.message || "Fehler in der HF-Warteschlange"));
-            }
-          });
-
-          job.on("data", (data) => {
-            resolve(data);
-          });
+        // Schritt A: Starte die asynchrone Generierung (wie in der Doku vorgegeben)
+        console.log("⏳ Starte Generierungs-Task auf Hugging Face...");
+        await client.predict("/t2v_generation_async", { 		
+          prompt: finalEnglishPrompt, 		
+          size: "832*480", // Unterstützte Auflösung laut UI
+          watermark_wan: true, 		
+          seed: -1, // -1 für zufälligen Seed
         });
 
+        // Schritt B: Polling-Schleife. Wir fragen den Status ab, bis ein Video da ist.
         let videoUrl = "";
-        if (result.data && result.data[0]) {
-          // Das offizielle Modell liefert ein JSON-Objekt mit der URL zurück
-          videoUrl = result.data[0].url || result.data[0];
-        }
+        let attempts = 0;
+        const maxAttempts = 30; // Max 30 Versuche (30 * 4 Sekunden = 120 Sekunden maximale Wartezeit)
+
+        console.log("🔄 Video wird gerendert. Warte auf Fertigstellung...");
         
+        while (!videoUrl && attempts < maxAttempts) {
+          // Warte 4 Sekunden zwischen den Abfragen, um die HF-API nicht zu DDOSen
+          await new Promise(resolve => setTimeout(resolve, 4000));
+          attempts++;
+
+          try {
+            const statusResult = await client.predict("/status_refresh", {});
+            
+            // Laut Doku: [0] ist das Video-Element (Objekt mit .url oder direkt ein String)
+            if (statusResult.data && statusResult.data[0]) {
+              const dataObj = statusResult.data[0];
+              videoUrl = dataObj.url || (typeof dataObj === "string" ? dataObj : "");
+              
+              if (videoUrl) {
+                console.log(`✨ Video erfolgreich generiert nach Versuch ${attempts}!`);
+                break;
+              }
+            }
+          } catch (pollErr) {
+            console.log("Warte auf Queue-Freigabe...");
+          }
+        }
+
         if (!videoUrl) {
-          throw new Error("Keine Video-URL im Resultat von Wan2.1 gefunden.");
+          throw new Error("Das Rendern dauert zu lange (Timeout) oder die Warteschlange ist blockiert.");
         }
         
         return res.json({ 
-          reply: `Hier ist dein generiertes Video für: **${prompt}** (Generiert mit dem offiziellen SOTA Wan 2.1 Modell! 🚀)`, 
+          reply: `Hier ist dein generiertes Video für: **${prompt}** (Generiert mit dem offiziellen Wan 2.1 Modell! 🚀)`, 
           generatedVideo: videoUrl
         });
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Der offizielle Wan-AI Space ist wegen der vielen Likes extrem ausgelastet oder die Warteschlange ist voll. Bitte versuche es in wenigen Augenblicken noch einmal!" });
+        return res.json({ reply: "Der offizielle Wan-AI Space ist aktuell überlastet oder das Rendern hat das Zeitlimit überschritten. Bitte versuche es gleich noch einmal!" });
       }
     }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
