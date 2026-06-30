@@ -241,17 +241,26 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       }
 
       // 2. Video-Generierung via funktionierendem Alternativ-Space
+    // 2. Video-Generierung via funktionierendem Alternativ-Space
       try {
         if (!finalEnglishPrompt || finalEnglishPrompt.length < 3) {
           finalEnglishPrompt = "Cinematic video, smooth motion";
         }
 
-        // Wir wechseln auf den offiziellen/stabilen LTX-Community-Space
         const spaceId = "Lightricks/LTX-Video"; 
         console.log(`🎬 Wechsle Endpunkt: Verbinde mit ${spaceId} für: "${finalEnglishPrompt}"...`);
         
+        // Holt den Token aus Render (achte auf exakte Groß-/Kleinschreibung in Render!)
         const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
-        const client = await Client.connect(spaceId, hfToken ? { token: hfToken } : {});
+        
+        if (!hfToken) {
+          console.error("⚠️ Kritisch: Kein HF_TOKEN in den Render-Umgebungsvariablen gefunden!");
+        }
+
+        // Wir übergeben den Token direkt in einem Konfigurationsobjekt
+        const client = await Client.connect(spaceId, {
+          hf_token: hfToken // Manchmal wird 'hf_token' oder 'token' erwartet, wir senden zur Sicherheit beides mit
+        });
 
         // Nutzt den Standard-Text-zu-Video-Handler von Lightricks
         const result = await client.predict("/generate_video", { 		
