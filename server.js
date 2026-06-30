@@ -205,7 +205,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
       let prompt = message.replace(/^\/video\s*/i, "").replace(/^generiere ein video\s*(von\s*)?/i, "");
       if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was im Video zu sehen sein soll!" });
 
-      // 1. Prompt übersetzen und strikt optimieren
+      console.log("⚡ Stufe 1: Groq Compound wird angefragt...");
       let finalEnglishPrompt = "";
       try {
         const translationRes = await groq.chat.completions.create({
@@ -221,19 +221,16 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         
         let translatedText = translationRes.choices?.[0]?.message?.content?.trim() || "";
         
-        // Falls Groq trotz Verbot das deutsche Wort spiegelt (z.B. "fliegende Katze -> flying cat")
         if (translatedText.includes("->") || translatedText.includes("→")) {
           translatedText = translatedText.split(/[->→]/).pop();
         }
         
-        // Bereinigen von Zeilenumbrüchen und Markdown-Resten
         if (translatedText.includes("\n")) {
           translatedText = translatedText.split("\n").pop();
         }
 
         finalEnglishPrompt = translatedText.replace(/[“”*'`"»«]/g, "").trim();
 
-        // Fallback, falls das deutsche Wort versehentlich extrahiert wurde
         if (finalEnglishPrompt.toLowerCase().includes(prompt.toLowerCase()) && prompt.toLowerCase() !== "flying cat") {
           finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
         }
@@ -243,33 +240,31 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         finalEnglishPrompt = "Cinematic video, smooth motion";
       }
 
-      // 2. Video-Generierung via techfreakworm/LTX2.3-Studio (Blackwell GPUs)
+      // 2. Video-Generierung via funktionierendem Alternativ-Space
       try {
         if (!finalEnglishPrompt || finalEnglishPrompt.length < 3) {
-          finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
+          finalEnglishPrompt = "Cinematic video, smooth motion";
         }
 
-        const spaceId = "techfreakworm/LTX2.3-Studio";
-        console.log(`🎬 Verbinde mit ${spaceId} für: "${finalEnglishPrompt}"...`);
+        // Wir wechseln auf den offiziellen/stabilen LTX-Community-Space
+        const spaceId = "Lightricks/LTX-Video"; 
+        console.log(`🎬 Wechsle Endpunkt: Verbinde mit ${spaceId} für: "${finalEnglishPrompt}"...`);
         
         const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
         const client = await Client.connect(spaceId, hfToken ? { token: hfToken } : {});
 
-        // Exakt 13 Parameter
-        const result = await client.predict("/handler", { 		
-          param_0: finalEnglishPrompt, 
-          param_1: "Fast",              
-          param_2: 768,                 
-          param_3: 512,                 
-          param_4: 3,                   
-          param_5: 24,                  
-          param_6: 42,                  
-          param_7: true,                
-          param_8: "low quality, worst quality, deformed, blurry, watermark", 
-          param_9: "none",              
-          param_10: 0,                  
-          param_11: false,              
-          param_12: 0,                  
+        // Nutzt den Standard-Text-zu-Video-Handler von Lightricks
+        const result = await client.predict("/generate_video", { 		
+          prompt: finalEnglishPrompt,
+          negative_prompt: "low quality, worst quality, deformed, blurry, watermark",
+          frame_rate: 24,
+          seed: 42,
+          randomize_seed: true,
+          width: 768,
+          height: 512,
+          num_frames: 49, // Entspricht ca. 2-3 Sekunden bei 24fps
+          guidance_scale: 3,
+          num_inference_steps: 20
         });
 
         console.log("📦 LTX API-Antwort empfangen:", JSON.stringify(result.data));
@@ -302,7 +297,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Die Video-Generierung auf dem Blackwell-Server ist fehlgeschlagen." });
+        return res.json({ reply: "Die Video-Generierung ist auf dem primären Server fehlgeschlagen. Versuche es gleich noch einmal!" });
       }
     }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
