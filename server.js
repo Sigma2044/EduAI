@@ -250,13 +250,19 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       }
     }
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
-const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("generiere ein video");
+const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("animiere das bild");
 
     if (isVideoGeneration) {
-      let prompt = message.replace(/^\/video\s*/i, "").replace(/^generiere ein video\s*(von\s*)?/i, "");
-      if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was im Video zu sehen sein soll!" });
+      // Beispiel-Zuweisung: Hier müsste die URL des Bildes herkommen, das animiert werden soll
+      // Wenn der User vorher ein Bild generiert hat, kannst du die URL hier dynamisch übergeben
+      let inputImageUrl = "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png"; 
+      
+      let prompt = message.replace(/^\/video\s*/i, "").replace(/^animiere das bild\s*(mit\s*)?/i, "");
+      if (!prompt.trim()) {
+        prompt = "Make this image come alive with cinematic motion, smooth animation"; // Toller Standard-Prompt aus der Doku
+      }
 
-      console.log("⚡ Stufe 1: Groq Compound wird angefragt...");
+      console.log("⚡ Stufe 1: Groq Compound wird für die Video-Übersetzung angefragt...");
       let finalEnglishPrompt = "";
       try {
         const translationRes = await groq.chat.completions.create({
@@ -264,85 +270,55 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
           messages: [
             { 
               role: "system", 
-              content: "You are a translation assistant. Translate the user's input from German to English and add short cinematic motion keywords. Crucial rule: Output ONLY the final English translation. Do NOT repeat the German input. Do NOT write 'Translation:'. Output exactly one plain text string." 
+              content: "You are a translation assistant. Translate the user's input from German to English and add short cinematic motion keywords. Output ONLY the final English translation." 
             },
             { role: "user", content: prompt }
           ]
         });
-        
-        let translatedText = translationRes.choices?.[0]?.message?.content?.trim() || "";
-        
-        if (translatedText.includes("->") || translatedText.includes("→")) {
-          translatedText = translatedText.split(/[->→]/).pop();
-        }
-        
-        if (translatedText.includes("\n")) {
-          translatedText = translatedText.split("\n").pop();
-        }
-
-        finalEnglishPrompt = translatedText.replace(/[“”*'`"»«]/g, "").trim();
-
-        if (finalEnglishPrompt.toLowerCase().includes(prompt.toLowerCase()) && prompt.toLowerCase() !== "flying cat") {
-          finalEnglishPrompt = "Cinematic video of a flying cat, smooth motion";
-        }
-
+        finalEnglishPrompt = translationRes.choices?.[0]?.message?.content?.trim() || prompt;
       } catch (transErr) {
-        console.error("Translation failed, using original prompt:", transErr);
-        finalEnglishPrompt = "Cinematic video, smooth motion";
+        console.error("Translation failed, using fallback:", transErr);
+        finalEnglishPrompt = prompt;
       }
 
-      // 2. Video-Generierung via funktionierendem Alternativ-Space
-    // 2. Video-Generierung via funktionierendem Alternativ-Space
+      // 2. Verbindung zum neuen LTX-2-3 Space
       try {
-        if (!finalEnglishPrompt || finalEnglishPrompt.length < 3) {
-          finalEnglishPrompt = "Cinematic video, smooth motion";
-        }
-
-        const spaceId = "Lightricks/LTX-Video"; 
-        console.log(`🎬 Wechsle Endpunkt: Verbinde mit ${spaceId} für: "${finalEnglishPrompt}"...`);
+        const spaceId = "Lightricks/LTX-2-3"; 
+        console.log(`🎬 Verbinde mit ZeroGPU Space ${spaceId}...`);
         
-        // Holt den Token aus Render (achte auf exakte Groß-/Kleinschreibung in Render!)
-        const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
+        const hfToken = process.env.HF_TOKEN; 
         
-        if (!hfToken) {
-          console.error("⚠️ Kritisch: Kein HF_TOKEN in den Render-Umgebungsvariablen gefunden!");
-        }
+        // Wichtig: hf_token flach im Objekt übergeben, damit Gradio es schluckt!
+        const client = await Client.connect(spaceId, hfToken ? { hf_token: hfToken } : {});
 
-        // Wir übergeben den Token direkt in einem Konfigurationsobjekt
-        const client = await Client.connect(spaceId, {
-          hf_token: hfToken // Manchmal wird 'hf_token' oder 'token' erwartet, wir senden zur Sicherheit beides mit
-        });
+        // Da die API ein Blob/Buffer/File verlangt, holen wir uns das Bild als Blob ab
+        const imageResponse = await fetch(inputImageUrl);
+        const imageBlob = await imageResponse.blob();
 
-        // Nutzt den Standard-Text-zu-Video-Handler von Lightricks
-        const result = await client.predict("/generate_video", { 		
+        console.log(`🚀 Sende Anfrage an LTX-2-3 für Prompt: "${finalEnglishPrompt}"`);
+        
+        // Aufruf exakt nach der neuen API-Dokumentation
+        const result = await client.predict("/generate_video", {
+          input_image: imageBlob,
           prompt: finalEnglishPrompt,
-          negative_prompt: "low quality, worst quality, deformed, blurry, watermark",
-          frame_rate: 24,
-          seed: 42,
+          duration: 3.0,
+          enhance_prompt: false,
+          seed: 10,
           randomize_seed: true,
-          width: 768,
-          height: 512,
-          num_frames: 49, // Entspricht ca. 2-3 Sekunden bei 24fps
-          guidance_scale: 3,
-          num_inference_steps: 20
+          height: 1024, // Standard-Auflösung aus der Doku
+          width: 1536,
         });
 
-        console.log("📦 LTX API-Antwort empfangen:", JSON.stringify(result.data));
+        console.log("📦 LTX-2-3 API-Antwort empfangen:", JSON.stringify(result.data));
 
+        // Das Video-Objekt aus dem ersten Element des Arrays [0] extrahieren
         let videoUrl = "";
         if (result.data && result.data.length > 0) {
-          for (const item of result.data) {
-            if (!item) continue;
-            if (item.video && item.video.url) {
-              videoUrl = item.video.url;
-              break;
-            } else if (item.url) {
-              videoUrl = item.url;
-              break;
-            } else if (typeof item === "string" && item.startsWith("http")) {
-              videoUrl = item;
-              break;
-            }
+          const item = result.data[0];
+          if (item && item.url) {
+            videoUrl = item.url;
+          } else if (typeof item === "string" && item.startsWith("http")) {
+            videoUrl = item;
           }
         }
         
@@ -351,13 +327,13 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         }
         
         return res.json({ 
-          reply: `Hier ist dein generiertes Video für: **${prompt}** ⚡`, 
+          reply: `Hier ist dein animiertes LTX 2.3 Video! 🎬`, 
           generatedVideo: videoUrl
         });
 
       } catch (videoErr) {
         console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Die Video-Generierung ist auf dem primären Server fehlgeschlagen. Versuche es gleich noch einmal!" });
+        return res.json({ reply: "Die Video-Generierung über LTX-2-3 ist fehlgeschlagen oder das Kontingent ist erschöpft." });
       }
     }
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
