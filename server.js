@@ -301,7 +301,7 @@ const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("
         const result = await client.predict("/generate_video", {
           input_image: imageBlob,
           prompt: finalEnglishPrompt,
-          duration: 3.0,
+          duration: 8.0,
           enhance_prompt: false,
           seed: 10,
           randomize_seed: true,
