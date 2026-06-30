@@ -169,33 +169,82 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     }
 
     // --- POLLINATIONS AI BILDGENERIERUNG ---
-    const isImageGeneration = msgLower.startsWith("/image") || msgLower.startsWith("generiere ein bild");
+   const isImageGeneration = msgLower.startsWith("/bild") || msgLower.startsWith("generiere ein bild");
 
     if (isImageGeneration) {
-      let prompt = message.replace(/^\/image\s*/i, "").replace(/^generiere ein bild\s*(von\s*)?/i, "");
-      if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was ich zeichnen soll!" });
+      let prompt = message.replace(/^\/bild\s*/i, "").replace(/^generiere ein bild\s*(von\s*)?/i, "");
+      if (!prompt.trim()) return res.json({ reply: "Bitte gib an, was auf dem Bild zu sehen sein soll!" });
 
-      let finalEnglishPrompt = prompt;
+      console.log("⚡ Stufe 1: Groq Compound wird für die Bild-Übersetzung angefragt...");
+      let finalEnglishPrompt = "";
+      
       try {
         const translationRes = await groq.chat.completions.create({
           model: "groq/compound",
           messages: [
-            { role: "system", content: "Translate the user's image prompt from German to English. Enhance it with vivid descriptive keywords for high quality. Reply ONLY with the final English prompt." },
+            { 
+              role: "system", 
+              content: "You are a translation assistant. Translate the user's input from German to English and add short descriptive art keywords (e.g., highly detailed, cinematic lighting). Output ONLY the final English translation. Do NOT repeat the German input. Do NOT write 'Translation:'." 
+            },
             { role: "user", content: prompt }
           ]
         });
-        const translatedText = translationRes.choices?.[0]?.message?.content?.trim();
-        if (translatedText) finalEnglishPrompt = translatedText;
-      } catch {}
+        
+        let translatedText = translationRes.choices?.[0]?.message?.content?.trim() || "";
+        
+        // Bereinigung von eventuellen Resten
+        if (translatedText.includes("->") || translatedText.includes("→")) {
+          translatedText = translatedText.split(/[->→]/).pop();
+        }
+        finalEnglishPrompt = translatedText.replace(/[“”*'`"»«]/g, "").trim();
 
-      const encodedPrompt = encodeURIComponent(finalEnglishPrompt);
-      const randomSeed = Math.floor(Math.random() * 100000);
-      const generatedImageUrl = `https://image.pollinations.ai/p/${encodedPrompt}?model=flux&width=1024&height=768&seed=${randomSeed}`;
+      } catch (transErr) {
+        console.error("Translation failed, using original prompt:", transErr);
+        finalEnglishPrompt = prompt; // Fallback auf Originaltext
+      }
 
-      return res.json({ 
-        reply: `Hier ist dein generiertes Bild für: **${prompt}**`, 
-        generatedImage: generatedImageUrl 
-      });
+      // 2. Bild-Generierung via deinem ZeroGPU Space
+      try {
+        const spaceId = "max3244363/Stable-Diffusion-1.5"; 
+        console.log(`🎨 Verbinde mit ZeroGPU Space ${spaceId} für: "${finalEnglishPrompt}"...`);
+        
+        const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
+        const client = await Client.connect(spaceId, hfToken ? { token: hfToken } : {});
+
+        // Aufruf des Endpunkts mit den exakten Parametern aus deiner Doku
+        const result = await client.predict("/generate_image", { 		
+          prompt: finalEnglishPrompt, 
+          negative_prompt: "low quality, bad anatomy, blurry, deformed", 
+          steps: 22, 
+          guidance_scale: 7.5, 
+        });
+
+        console.log("📦 API-Antwort empfangen:", JSON.stringify(result.data));
+
+        // Das Bild-Objekt oder die URL aus der Antwort extrahieren
+        let imageUrl = "";
+        if (result.data && result.data.length > 0) {
+          const item = result.data[0];
+          if (item && item.url) {
+            imageUrl = item.url;
+          } else if (typeof item === "string" && item.startsWith("http")) {
+            imageUrl = item;
+          }
+        }
+        
+        if (!imageUrl) {
+          throw new Error("Keine Bild-URL in den empfangenen Daten gefunden.");
+        }
+        
+        return res.json({ 
+          reply: `Hier ist dein generiertes Bild für: **${prompt}** 🎨`, 
+          generatedImage: imageUrl
+        });
+
+      } catch (imgErr) {
+        console.error("❌ Bild-Generierungsfehler:", imgErr.message || imgErr);
+        return res.json({ reply: "Die Bild-Generierung auf dem ZeroGPU-Server ist fehlgeschlagen. Versuche es bitte gleich noch einmal!" });
+      }
     }
 
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
