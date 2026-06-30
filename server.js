@@ -233,8 +233,8 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         const result = await client.predict("/generate_image", { 		
           prompt: finalEnglishPrompt, 
           negative_prompt: "low quality, bad anatomy, blurry, deformed", 
-          steps: 22, 
-          guidance_scale: 7.5, 
+          steps: 1, 
+          guidance_scale: 0.0, 
         });
 
         console.log("📦 API-Antwort empfangen:", JSON.stringify(result.data));
