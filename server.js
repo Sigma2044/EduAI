@@ -169,7 +169,7 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     }
 
     // --- POLLINATIONS AI BILDGENERIERUNG ---
-   const isImageGeneration = msgLower.startsWith("/bild") || msgLower.startsWith("generiere ein bild");
+  const isImageGeneration = msgLower.startsWith("/bild") || msgLower.startsWith("generiere ein bild");
 
     if (isImageGeneration) {
       let prompt = message.replace(/^\/bild\s*/i, "").replace(/^generiere ein bild\s*(von\s*)?/i, "");
@@ -208,7 +208,10 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         const spaceId = "max3244363/Stable-Diffusion-1.5"; 
         console.log(`🎨 Verbinde mit ZeroGPU Space ${spaceId} für: "${finalEnglishPrompt}"...`);
         
-        const hfToken = process.env.HF_TOKEN || process.env.HG_TOKEN; 
+        // Holt deinen Token aus den Render-Umgebungsvariablen
+        const hfToken = process.env.HF_TOKEN; 
+        
+        // Token wird beim Verbindungsaufbau übergeben, um das Kontingent zu erhöhen
         const client = await Client.connect(spaceId, hfToken ? { token: hfToken } : {});
 
         // Aufruf des Endpunkts mit den exakten Parametern aus deiner Doku
@@ -243,10 +246,9 @@ app.post("/chat", upload.single("image"), async (req, res) => {
 
       } catch (imgErr) {
         console.error("❌ Bild-Generierungsfehler:", imgErr.message || imgErr);
-        return res.json({ reply: "Die Bild-Generierung auf dem ZeroGPU-Server ist fehlgeschlagen. Versuche es bitte gleich noch einmal!" });
+        return res.json({ reply: "Die Bild-Generierung auf dem ZeroGPU-Server ist fehlgeschlagen oder das Kontingent ist erschöpft. Versuche es bitte gleich noch einmal!" });
       }
     }
-
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
 const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("generiere ein video");
 
