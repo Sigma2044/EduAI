@@ -212,7 +212,7 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         const hfToken = process.env.HF_TOKEN; 
         
         // Token wird beim Verbindungsaufbau übergeben, um das Kontingent zu erhöhen
-        const client = await Client.connect(spaceId, hfToken ? { token: hfToken } : {});
+      const client = await Client.connect(spaceId, hfToken ? { hf_token: hfToken } : {});
 
         // Aufruf des Endpunkts mit den exakten Parametern aus deiner Doku
         const result = await client.predict("/generate_image", { 		
