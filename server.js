@@ -77,20 +77,35 @@ async function runLLM(messages) {
   }
 }
 
+import { toFile } from "groq-sdk"; // Falls das oben importiert werden kann
+// Alternativ: falls du kein toFile importieren willst, nutzen wir das native Node 'File'
+
 // ROUTE FÜR AUDIO-TRANSKRIPTION
 app.post("/transcribe", upload.single("audio"), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "Keine Audiodatei." });
+    if (!req.file) {
+      return res.status(400).json({ error: "Keine Audiodatei empfangen." });
+    }
+
+    console.log("🎙️ Verarbeite Audio für Groq Whisper...");
+
+    // Wir erstellen ein standardkonformes File-Objekt direkt aus dem Multer-Buffer.
+    // Das ist sicherer und verhindert Streaming-Abbrüche.
+    const audioFile = new File([req.file.buffer], req.file.originalname || "audio.wav", {
+      type: req.file.mimetype || "audio/wav",
+    });
+
     const transcription = await groq.audio.transcriptions.create({
-      file: fs.createReadStream(req.file.path),
-      model: "whisper-large-v3",
+      file: audioFile,
+      model: "whisper-large-v3-turbo", // Das Turbo-Modell spart dir wertvolle Millisekunden!
       language: "de",
       response_format: "json",
     });
-    fs.unlinkSync(req.file.path);
+
     return res.json({ text: transcription.text });
+
   } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    console.error("❌ Fehler bei der Spracherkennung:", error.message || error);
     return res.status(500).json({ error: "Fehler bei der Spracherkennung." });
   }
 });
