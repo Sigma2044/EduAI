@@ -48,9 +48,9 @@ function trimHistory(history) {
 async function runLLM(messages) {
   // --- STUFE 1: GROQ COMPOUND (Dein primäres Hauptmodell) ---
   try {
-    console.log("⚡ Stufe 1: Groq Compound wird angefragt...");
+    console.log("⚡ Stufe 1: Kimi K2 wird angefragt...");
     const res = await groq.chat.completions.create({
-      model: "groq/compound", 
+      model: "moonshotai/Kimi-K2-Instruct-0905", 
       messages: messages
     });
     return res.choices?.[0]?.message?.content;
@@ -61,9 +61,9 @@ async function runLLM(messages) {
 
   // --- STUFE 2: LLAMA 3.3 70B (Dein stabiles Groq-Backup) ---
   try {
-    console.log("🔄 Stufe 2: Llama 3.3 via Groq wird angefragt...");
+    console.log("🔄 Stufe 2: Compunand via Groq wird angefragt...");
     const fallbackRes = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "groq/compound",
       messages: messages
     });
     return fallbackRes.choices?.[0]?.message?.content;
