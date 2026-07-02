@@ -333,32 +333,37 @@ if (isImageEnhancement) {
 
     console.log("📦 Finegrain API-Antwort empfangen:", JSON.stringify(result.data));
 
-    // Die API gibt laut Doku 1 Element zurück (oft ein Array mit dem verbesserten Bild auf Index [0])
-    let enhancedImageUrl = "";
-    if (result.data && result.data.length > 0) {
-      const item = result.data[0];
-      // Gradio liefert entweder ein Objekt mit .url oder direkt den String-Pfad
-      if (item && item.url) {
-        enhancedImageUrl = item.url;
-      } else if (typeof item === "string" && item.startsWith("http")) {
-        enhancedImageUrl = item;
-      }
-    }
-    
-    if (!enhancedImageUrl) {
-      throw new Error("Keine Bild-URL in den empfangenen Daten vom Enhancer gefunden.");
-    }
-    
-    return res.json({ 
-      reply: `Hier ist dein verbessertes und hochskaliertes Bild! ✨`, 
-      generatedImage: enhancedImageUrl
-    });
+// Das verbesserte Bild aus dem verschachtelten Array extrahieren
+let enhancedImageUrl = "";
 
-  } catch (enhanceErr) {
-    console.error("❌ Enhancer-Fehler:", enhanceErr.message || enhanceErr);
-    return res.json({ reply: "Die Bildverbesserung ist fehlgeschlagen oder das Kontingent des Spaces ist erschöpft." });
+if (result.data && result.data.length > 0) {
+  // Das innere Array herausholen
+  const innerArray = result.data[0]; 
+  
+  if (Array.isArray(innerArray) && innerArray.length > 0) {
+    // Index [1] ist in der Regel das bearbeitete "Nachher"-Bild. 
+    // Falls das innere Array nur 1 Element hat, nehmen wir Index [0].
+    const item = innerArray[1] || innerArray[0];
+    
+    if (item && item.url) {
+      enhancedImageUrl = item.url;
+    } else if (typeof item === "string" && item.startsWith("http")) {
+      enhancedImageUrl = item;
+    }
+  } else if (innerArray && innerArray.url) {
+    // Fallback, falls es doch mal ein flaches Array sein sollte
+    enhancedImageUrl = innerArray.url;
   }
 }
+
+if (!enhancedImageUrl) {
+  throw new Error("Keine Bild-URL in den empfangenen Daten vom Enhancer gefunden.");
+}
+
+return res.json({ 
+  reply: `Hier ist dein verbessertes und hochskaliertes Bild! ✨`, 
+  generatedImage: enhancedImageUrl
+});
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
 const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("animiere das bild");
 
