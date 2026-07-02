@@ -264,6 +264,101 @@ app.post("/chat", upload.single("image"), async (req, res) => {
         return res.json({ reply: "Die Bild-Generierung auf dem ZeroGPU-Server ist fehlgeschlagen oder das Kontingent ist erschöpft. Versuche es bitte gleich noch einmal!" });
       }
     }
+    //--- UPSCALE --- 
+    const isImageEnhancement = msgLower.startsWith("/enhance") || msgLower.startsWith("verbessere das bild");
+
+if (isImageEnhancement) {
+  // Hier muss die URL des Bildes übergeben werden, das hochskaliert/verbessert werden soll
+  let inputImageUrl = "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png"; 
+
+  let prompt = message.replace(/^\/enhance\s*/i, "").replace(/^verbessere das bild\s*(mit\s*)?/i, "");
+  if (!prompt.trim()) {
+    // Falls kein Prompt angegeben ist, beschreiben wir einfach eine Erhöhung der Details
+    prompt = "masterpiece, highly detailed, sharp focus, 8k resolution, cinematic look"; 
+  }
+
+  console.log("⚡ Stufe 1: Groq Compound wird für die Enhancer-Übersetzung angefragt...");
+  let finalEnglishPrompt = "";
+  try {
+    const translationRes = await groq.chat.completions.create({
+      model: "groq/compound",
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a translation assistant. Translate the user's enhancement prompt from German to English, focusing on high-quality and crisp details. Output ONLY the final English translation." 
+        },
+        { role: "user", content: prompt }
+      ]
+    });
+    finalEnglishPrompt = translationRes.choices?.[0]?.message?.content?.trim() || prompt;
+  } catch (transErr) {
+    console.error("Translation failed, using fallback:", transErr);
+    finalEnglishPrompt = prompt;
+  }
+
+  // 2. Verbindung zum Finegrain Image Enhancer Space
+  try {
+    const spaceId = "finegrain/finegrain-image-enhancer"; 
+    console.log(`🖼️ Verbinde mit Enhancer Space ${spaceId}...`);
+    
+    const hfToken = process.env.HF_TOKEN; 
+    const client = await Client.connect(spaceId, hfToken ? { hf_token: hfToken } : {});
+
+    if (!inputImageUrl) {
+      return res.json({ reply: "Bitte gib mir ein Bild mit, das ich für dich verbessern soll!" });
+    }
+
+    console.log("📥 Lade das Originalbild für das Upscaling herunter...");
+    const imageResponse = await fetch(inputImageUrl);
+    const imageBlob = await imageResponse.blob();
+
+    console.log(`🚀 Sende Anfrage an ${spaceId} mit Prompt: "${finalEnglishPrompt}"`);
+    
+    // Aufruf exakt nach den 13 Parametern der Finegrain API-Dokumentation
+    const result = await client.predict("/process", {
+      input_image: imageBlob,
+      prompt: finalEnglishPrompt,
+      negative_prompt: "blurry, low quality, distorted, out of focus, bad anatomy, grainy",
+      seed: 42,
+      upscale_factor: 2,          // Verdoppelt die Auflösung (perfekt für ZeroGPU Stabilität)
+      controlnet_scale: 0.6,      // Hält sich nah an der Struktur des Originalbildes
+      controlnet_decay: 1.0,
+      condition_scale: 6.0,
+      tile_width: 112,            // Standardwerte aus der Dokumentation
+      tile_height: 144,
+      denoise_strength: 0.35,     // Entfernt Rauschen, behält das Original aber bei
+      num_inference_steps: 18,    // Solide Qualität bei gutem Speed
+      solver: "DDIM",
+    });
+
+    console.log("📦 Finegrain API-Antwort empfangen:", JSON.stringify(result.data));
+
+    // Die API gibt laut Doku 1 Element zurück (oft ein Array mit dem verbesserten Bild auf Index [0])
+    let enhancedImageUrl = "";
+    if (result.data && result.data.length > 0) {
+      const item = result.data[0];
+      // Gradio liefert entweder ein Objekt mit .url oder direkt den String-Pfad
+      if (item && item.url) {
+        enhancedImageUrl = item.url;
+      } else if (typeof item === "string" && item.startsWith("http")) {
+        enhancedImageUrl = item;
+      }
+    }
+    
+    if (!enhancedImageUrl) {
+      throw new Error("Keine Bild-URL in den empfangenen Daten vom Enhancer gefunden.");
+    }
+    
+    return res.json({ 
+      reply: `Hier ist dein verbessertes und hochskaliertes Bild! ✨`, 
+      generatedImage: enhancedImageUrl
+    });
+
+  } catch (enhanceErr) {
+    console.error("❌ Enhancer-Fehler:", enhanceErr.message || enhanceErr);
+    return res.json({ reply: "Die Bildverbesserung ist fehlgeschlagen oder das Kontingent des Spaces ist erschöpft." });
+  }
+}
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
 const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("animiere das bild");
 
