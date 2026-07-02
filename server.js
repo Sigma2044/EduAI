@@ -265,7 +265,7 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       }
     }
     //--- UPSCALE --- 
-    const isImageEnhancement = msgLower.startsWith("/enhance") || msgLower.startsWith("verbessere das bild");
+  const isImageEnhancement = msgLower.startsWith("/enhance") || msgLower.startsWith("verbessere das bild");
 
 if (isImageEnhancement) {
   // Hier muss die URL des Bildes übergeben werden, das hochskaliert/verbessert werden soll
@@ -273,7 +273,6 @@ if (isImageEnhancement) {
 
   let prompt = message.replace(/^\/enhance\s*/i, "").replace(/^verbessere das bild\s*(mit\s*)?/i, "");
   if (!prompt.trim()) {
-    // Falls kein Prompt angegeben ist, beschreiben wir einfach eine Erhöhung der Details
     prompt = "masterpiece, highly detailed, sharp focus, 8k resolution, cinematic look"; 
   }
 
@@ -285,7 +284,7 @@ if (isImageEnhancement) {
       messages: [
         { 
           role: "system", 
-          content: "You are a translation assistant. Translate the user's enhancement prompt from German to English, focusing on high-quality and crisp details. Output ONLY the final English translation." 
+          content: "You are a translation assistant. Translate the user's prompt to English. Output ONLY the final translation, no explanations, no chat, no notes." 
         },
         { role: "user", content: prompt }
       ]
@@ -314,56 +313,57 @@ if (isImageEnhancement) {
 
     console.log(`🚀 Sende Anfrage an ${spaceId} mit Prompt: "${finalEnglishPrompt}"`);
     
-    // Aufruf exakt nach den 13 Parametern der Finegrain API-Dokumentation
     const result = await client.predict("/process", {
       input_image: imageBlob,
       prompt: finalEnglishPrompt,
       negative_prompt: "blurry, low quality, distorted, out of focus, bad anatomy, grainy",
       seed: 42,
-      upscale_factor: 2,          // Verdoppelt die Auflösung (perfekt für ZeroGPU Stabilität)
-      controlnet_scale: 0.6,      // Hält sich nah an der Struktur des Originalbildes
+      upscale_factor: 2,          
+      controlnet_scale: 0.6,      
       controlnet_decay: 1.0,
       condition_scale: 6.0,
-      tile_width: 112,            // Standardwerte aus der Dokumentation
+      tile_width: 112,            
       tile_height: 144,
-      denoise_strength: 0.35,     // Entfernt Rauschen, behält das Original aber bei
-      num_inference_steps: 18,    // Solide Qualität bei gutem Speed
+      denoise_strength: 0.35,     
+      num_inference_steps: 18,    
       solver: "DDIM",
     });
 
     console.log("📦 Finegrain API-Antwort empfangen:", JSON.stringify(result.data));
 
-// Das verbesserte Bild aus dem verschachtelten Array extrahieren
-let enhancedImageUrl = "";
-
-if (result.data && result.data.length > 0) {
-  // Das innere Array herausholen
-  const innerArray = result.data[0]; 
-  
-  if (Array.isArray(innerArray) && innerArray.length > 0) {
-    // Index [1] ist in der Regel das bearbeitete "Nachher"-Bild. 
-    // Falls das innere Array nur 1 Element hat, nehmen wir Index [0].
-    const item = innerArray[1] || innerArray[0];
-    
-    if (item && item.url) {
-      enhancedImageUrl = item.url;
-    } else if (typeof item === "string" && item.startsWith("http")) {
-      enhancedImageUrl = item;
+    // Fix für das verschachtelte Array [[ original, enhanced ]]
+    let enhancedImageUrl = "";
+    if (result.data && result.data.length > 0) {
+      const innerArray = result.data[0]; 
+      
+      if (Array.isArray(innerArray) && innerArray.length > 0) {
+        // Index [1] holt das "Nachher"-Bild aus dem Array
+        const item = innerArray[1] || innerArray[0];
+        
+        if (item && item.url) {
+          enhancedImageUrl = item.url;
+        } else if (typeof item === "string" && item.startsWith("http")) {
+          enhancedImageUrl = item;
+        }
+      } else if (innerArray && innerArray.url) {
+        enhancedImageUrl = innerArray.url;
+      }
     }
-  } else if (innerArray && innerArray.url) {
-    // Fallback, falls es doch mal ein flaches Array sein sollte
-    enhancedImageUrl = innerArray.url;
+    
+    if (!enhancedImageUrl) {
+      throw new Error("Keine Bild-URL in den empfangenen Daten vom Enhancer gefunden.");
+    }
+    
+    return res.json({ 
+      reply: `Hier ist dein verbessertes und hochskaliertes Bild! ✨`, 
+      generatedImage: enhancedImageUrl
+    });
+
+  } catch (enhanceErr) {
+    console.error("❌ Enhancer-Fehler:", enhanceErr.message || enhanceErr);
+    return res.json({ reply: "Die Bildverbesserung ist fehlgeschlagen oder das Kontingent des Spaces ist erschöpft." });
   }
 }
-
-if (!enhancedImageUrl) {
-  throw new Error("Keine Bild-URL in den empfangenen Daten vom Enhancer gefunden.");
-}
-
-return res.json({ 
-  reply: `Hier ist dein verbessertes und hochskaliertes Bild! ✨`, 
-  generatedImage: enhancedImageUrl
-});
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
 const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("animiere das bild");
 
