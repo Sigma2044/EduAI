@@ -265,103 +265,72 @@ app.post("/chat", upload.single("image"), async (req, res) => {
       }
     }
     //--- UPSCALE --- 
-  const isImageEnhancement = msgLower.startsWith("/enhance") || msgLower.startsWith("verbessere das bild");
+ import { Client } from "@gradio/client";
 
-if (isImageEnhancement) {
-  // Hier muss die URL des Bildes übergeben werden, das hochskaliert/verbessert werden soll
-  let inputImageUrl = "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png"; 
+// Deine beiden Space-IDs von Hugging Face
+const SPACE_X2 = "max3244363/real-ESGRAN2";
+const SPACE_X4 = "max3244363/real-ESGRAN";
 
-  let prompt = message.replace(/^\/enhance\s*/i, "").replace(/^verbessere das bild\s*(mit\s*)?/i, "");
-  if (!prompt.trim()) {
-    prompt = "masterpiece, highly detailed, sharp focus, 8k resolution, cinematic look"; 
-  }
+// Beispielhafter Trigger in deinem Message-Handler
+const msgLower = message.text.toLowerCase();
+const isEnhance2x = msgLower.startsWith("/enhance2x");
+const isEnhance4x = msgLower.startsWith("/enhance") || msgLower.startsWith("/enhance4x") || msgLower.startsWith("verbessere das bild");
 
-  console.log("⚡ Stufe 1: Groq Compound wird für die Enhancer-Übersetzung angefragt...");
-  let finalEnglishPrompt = "";
+if (isEnhance2x || isEnhance4x) {
+  // Hier die URL des Bildes dynamisch holen (z.B. aus der vorherigen Discord/Telegram-Nachricht)
+  let inputImageUrl = "DEINE_INPUT_BILD_URL"; 
+
   try {
-    const translationRes = await groq.chat.completions.create({
-      model: "groq/compound",
-      messages: [
-        { 
-          role: "system", 
-          content: "You are a translation assistant. Translate the user's prompt to English. Output ONLY the final translation, no explanations, no chat, no notes." 
-        },
-        { role: "user", content: prompt }
-      ]
-    });
-    finalEnglishPrompt = translationRes.choices?.[0]?.message?.content?.trim() || prompt;
-  } catch (transErr) {
-    console.error("Translation failed, using fallback:", transErr);
-    finalEnglishPrompt = prompt;
-  }
-
-  // 2. Verbindung zum Finegrain Image Enhancer Space
-  try {
-    const spaceId = "finegrain/finegrain-image-enhancer"; 
-    console.log(`🖼️ Verbinde mit Enhancer Space ${spaceId}...`);
+    // 1. Entscheiden, welcher Space genutzt werden soll
+    const spaceId = isEnhance2x ? SPACE_X2 : SPACE_X4;
+    const factor = isEnhance2x ? "2x" : "4x";
+    
+    console.log(`🖼️ Verbinde mit deinem ${factor} Upscaler Space (${spaceId})...`);
     
     const hfToken = process.env.HF_TOKEN; 
+    // Verbindung aufbauen (mit Token, falls vorhanden, für höhere Rate-Limits)
     const client = await Client.connect(spaceId, hfToken ? { hf_token: hfToken } : {});
 
     if (!inputImageUrl) {
-      return res.json({ reply: "Bitte gib mir ein Bild mit, das ich für dich verbessern soll!" });
+      return res.json({ reply: "Bitte gib mir ein Bild mit, das ich hochskalieren soll!" });
     }
 
-    console.log("📥 Lade das Originalbild für das Upscaling herunter...");
+    console.log(`📥 Lade das Originalbild für den ${factor} Upscaler herunter...`);
     const imageResponse = await fetch(inputImageUrl);
     const imageBlob = await imageResponse.blob();
 
-    console.log(`🚀 Sende Anfrage an ${spaceId} mit Prompt: "${finalEnglishPrompt}"`);
+    console.log(`🚀 Sende Bild an ${spaceId}...`);
     
-    const result = await client.predict("/process", {
-      input_image: imageBlob,
-      prompt: finalEnglishPrompt,
-      negative_prompt: "blurry, low quality, distorted, out of focus, bad anatomy, grainy",
-      seed: 42,
-      upscale_factor: 2,          
-      controlnet_scale: 0.6,      
-      controlnet_decay: 1.0,
-      condition_scale: 6.0,
-      tile_width: 112,            
-      tile_height: 144,
-      denoise_strength: 0.35,     
-      num_inference_steps: 18,    
-      solver: "DDIM",
+    // Da deine app.py das Feld "input_img" im gr.Image nutzt, mappen wir es hier exakt so
+    const result = await client.predict("/predict", {
+      input_image: imageBlob, 
     });
 
-    console.log("📦 Finegrain API-Antwort empfangen:", JSON.stringify(result.data));
+    console.log(`📦 Ergebnis vom ${factor} Upscaler empfangen.`);
 
-    // Fix für das verschachtelte Array [[ original, enhanced ]]
+    // URL aus der Gradio-Antwort herausholen
     let enhancedImageUrl = "";
     if (result.data && result.data.length > 0) {
-      const innerArray = result.data[0]; 
-      
-      if (Array.isArray(innerArray) && innerArray.length > 0) {
-        // Index [1] holt das "Nachher"-Bild aus dem Array
-        const item = innerArray[1] || innerArray[0];
-        
-        if (item && item.url) {
-          enhancedImageUrl = item.url;
-        } else if (typeof item === "string" && item.startsWith("http")) {
-          enhancedImageUrl = item;
-        }
-      } else if (innerArray && innerArray.url) {
-        enhancedImageUrl = innerArray.url;
+      const item = result.data[0];
+      if (item && item.url) {
+        enhancedImageUrl = item.url;
+      } else if (typeof item === "string" && item.startsWith("http")) {
+        enhancedImageUrl = item;
       }
     }
     
     if (!enhancedImageUrl) {
-      throw new Error("Keine Bild-URL in den empfangenen Daten vom Enhancer gefunden.");
+      throw new Error("Keine Bild-URL im API-Response gefunden.");
     }
     
     return res.json({ 
-      reply: `Hier ist dein verbessertes und hochskaliertes Bild! ✨`, 
+      reply: `Ich habe dein Bild erfolgreich um das ${factor}-fache hochskaliert und geschärft! ✨`, 
       generatedImage: enhancedImageUrl
     });
 
   } catch (enhanceErr) {
-    console.error("❌ Enhancer-Fehler:", enhanceErr.message || enhanceErr);
-    return res.json({ reply: "Die Bildverbesserung ist fehlgeschlagen oder das Kontingent des Spaces ist erschöpft." });
+    console.error("❌ Upscaler Fehler:", enhanceErr.message || enhanceErr);
+    return res.json({ reply: "Die Bildverbesserung ist leider fehlgeschlagen." });
   }
 }
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
