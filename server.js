@@ -267,90 +267,111 @@ app.post("/chat", upload.single("image"), async (req, res) => {
     // --- ALIBABA COGVIDEOX-FUN VIDEO-GENERIERUNG (Kostenloser Space-Hack) ---
 const isVideoGeneration = msgLower.startsWith("/video") || msgLower.startsWith("animiere das bild");
 
-    if (isVideoGeneration) {
-      // Beispiel-Zuweisung: Hier müsste die URL des Bildes herkommen, das animiert werden soll
-      // Wenn der User vorher ein Bild generiert hat, kannst du die URL hier dynamisch übergeben
-      let inputImageUrl = "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png"; 
-      
-      let prompt = message.replace(/^\/video\s*/i, "").replace(/^animiere das bild\s*(mit\s*)?/i, "");
-      if (!prompt.trim()) {
-        prompt = "Make this image come alive with cinematic motion, smooth animation"; // Toller Standard-Prompt aus der Doku
-      }
+if (isVideoGeneration) {
+  // 1. Unterscheidung: Ist es Text-to-Video oder Image-to-Video?
+  const isImageToVideo = msgLower.startsWith("animiere das bild");
+  
+  // Falls es eine Bildanimation ist, müsste hier die URL des zu animierenden Bildes dynamisch herkommen.
+  let inputImageUrl = isImageToVideo ? "https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png" : null; 
+  
+  let prompt = message.replace(/^\/video\s*/i, "").replace(/^animiere das bild\s*(mit\s*)?/i, "");
+  if (!prompt.trim()) {
+    prompt = "Make this image come alive with cinematic motion, smooth animation"; 
+  }
 
-      console.log("⚡ Stufe 1: Groq Compound wird für die Video-Übersetzung angefragt...");
-      let finalEnglishPrompt = "";
-      try {
-        const translationRes = await groq.chat.completions.create({
-          model: "groq/compound",
-          messages: [
-            { 
-              role: "system", 
-              content: "You are a translation assistant. Translate the user's input from German to English and add short cinematic motion keywords. Output ONLY the final English translation." 
-            },
-            { role: "user", content: prompt }
-          ]
-        });
-        finalEnglishPrompt = translationRes.choices?.[0]?.message?.content?.trim() || prompt;
-      } catch (transErr) {
-        console.error("Translation failed, using fallback:", transErr);
-        finalEnglishPrompt = prompt;
-      }
+  console.log("⚡ Stufe 1: Groq Compound wird für die Video-Übersetzung angefragt...");
+  let finalEnglishPrompt = "";
+  try {
+    const translationRes = await groq.chat.completions.create({
+      model: "groq/compound",
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a translation assistant. Translate the user's input from German to English and add short cinematic motion keywords. Output ONLY the final English translation." 
+        },
+        { role: "user", content: prompt }
+      ]
+    });
+    finalEnglishPrompt = translationRes.choices?.[0]?.message?.content?.trim() || prompt;
+  } catch (transErr) {
+    console.error("Translation failed, using fallback:", transErr);
+    finalEnglishPrompt = prompt;
+  }
 
-      // 2. Verbindung zum neuen LTX-2-3 Space
-      try {
-        const spaceId = "Lightricks/LTX-2-3"; 
-        console.log(`🎬 Verbinde mit ZeroGPU Space ${spaceId}...`);
-        
-        const hfToken = process.env.HF_TOKEN; 
-        
-        // Wichtig: hf_token flach im Objekt übergeben, damit Gradio es schluckt!
-        const client = await Client.connect(spaceId, hfToken ? { hf_token: hfToken } : {});
+  // 2. Verbindung zum neuen LTX-2-3 First-Last-Frame Space
+  try {
+    const spaceId = "linoyts/LTX-2-3-First-Last-Frame"; 
+    console.log(`🎬 Verbinde mit ZeroGPU Space ${spaceId}...`);
+    
+    const hfToken = process.env.HF_TOKEN; 
+    const client = await Client.connect(spaceId, hfToken ? { hf_token: hfToken } : {});
 
-        // Da die API ein Blob/Buffer/File verlangt, holen wir uns das Bild als Blob ab
-        const imageResponse = await fetch(inputImageUrl);
-        const imageBlob = await imageResponse.blob();
+    // Optionale Bilder und Audio vorbereiten
+    let firstImageBlob = null;
+    let lastImageBlob = null;
+    let dummyAudioBlob = null;
 
-        console.log(`🚀 Sende Anfrage an LTX-2-3 für Prompt: "${finalEnglishPrompt}"`);
-        
-        // Aufruf exakt nach der neuen API-Dokumentation
-        const result = await client.predict("/generate_video", {
-          input_image: imageBlob,
-          prompt: finalEnglishPrompt,
-          duration: 8.0,
-          enhance_prompt: false,
-          seed: 10,
-          randomize_seed: true,
-          height: 1024, // Standard-Auflösung aus der Doku
-          width: 1536,
-        });
+    // Nur wenn der Befehl "animiere das bild" war, laden wir das Bild als Blob herunter
+    if (isImageToVideo && inputImageUrl) {
+      console.log("🖼️ Lade Bild für Image-to-Video herunter...");
+      const imageResponse = await fetch(inputImageUrl);
+      const imgBlob = await imageResponse.blob();
+      // Trick: Wir übergeben dasselbe Bild für Anfang und Ende, um einen sauberen Loop zu erzeugen
+      firstImageBlob = imgBlob;
+      lastImageBlob = imgBlob;
+    }
 
-        console.log("📦 LTX-2-3 API-Antwort empfangen:", JSON.stringify(result.data));
+    // Da Audio laut Doku 'Required' ist, holen wir uns ein stummes Standard-Audio-Sample als Dummy
+    try {
+      const audioResponse = await fetch("https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav");
+      dummyAudioBlob = await audioResponse.blob();
+    } catch (audErr) {
+      console.error("Konnte Dummy-Audio nicht laden:", audErr);
+    }
 
-        // Das Video-Objekt aus dem ersten Element des Arrays [0] extrahieren
-        let videoUrl = "";
-        if (result.data && result.data.length > 0) {
-          const item = result.data[0];
-          if (item && item.url) {
-            videoUrl = item.url;
-          } else if (typeof item === "string" && item.startsWith("http")) {
-            videoUrl = item;
-          }
-        }
-        
-        if (!videoUrl) {
-          throw new Error("Keine Video-URL in den empfangenen Daten gefunden.");
-        }
-        
-        return res.json({ 
-          reply: `Hier ist dein animiertes LTX 2.3 Video! 🎬`, 
-          generatedVideo: videoUrl
-        });
+    console.log(`🚀 Sende Anfrage an ${spaceId}. Modus: ${isImageToVideo ? 'I2V-Loop' : 'Reines T2V'}`);
+    
+    // Aufruf exakt nach der API-Spezifikation des linoyst-Spaces
+    const result = await client.predict("/generate_video", {
+      first_image: firstImageBlob,   // Blob bei I2V, null bei reinem T2V
+      last_image: lastImageBlob,     // Blob bei I2V, null bei reinem T2V
+      input_audio: dummyAudioBlob,   // Dummy-Audio-Blob
+      prompt: finalEnglishPrompt,
+      duration: 3.0,                 // Standardmäßig 3 Sekunden für ZeroGPU Stabilität
+      enhance_prompt: false,
+      seed: 10,
+      randomize_seed: true,
+      height: 1024,                  // Auflösungen aus der Dokumentation
+      width: 1536,
+    });
 
-      } catch (videoErr) {
-        console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
-        return res.json({ reply: "Die Video-Generierung über LTX-2-3 ist fehlgeschlagen oder das Kontingent ist erschöpft." });
+    console.log("📦 LTX-2-3 API-Antwort empfangen:", JSON.stringify(result.data));
+
+    // Video-URL extrahieren (Index [0] laut Doku)
+    let videoUrl = "";
+    if (result.data && result.data.length > 0) {
+      const item = result.data[0];
+      if (item && item.url) {
+        videoUrl = item.url;
+      } else if (typeof item === "string" && item.startsWith("http")) {
+        videoUrl = item;
       }
     }
+    
+    if (!videoUrl) {
+      throw new Error("Keine Video-URL in den empfangenen Daten gefunden.");
+    }
+    
+    return res.json({ 
+      reply: isImageToVideo ? `Hier ist dein animiertes Video als Loop! 🎬` : `Hier ist dein generiertes Video aus Text! 🎬`, 
+      generatedVideo: videoUrl
+    });
+
+  } catch (videoErr) {
+    console.error("❌ Video-Generierungsfehler:", videoErr.message || videoErr);
+    return res.json({ reply: "Die Video-Generierung über LTX-2-3 ist fehlgeschlagen oder das Kontingent des Ziel-Spaces ist erschöpft." });
+  }
+}
     // --- LOGIK FÜR TEXT-, VISION- UND PDF-CHATS ---
     let chatHistory = [];
     if (history) {
