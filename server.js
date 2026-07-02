@@ -50,7 +50,7 @@ async function runLLM(messages) {
   try {
     console.log("⚡ Stufe 1: Kimi K2 wird angefragt...");
     const res = await groq.chat.completions.create({
-      model: "moonshotai/Kimi-K2-Instruct-0905", 
+      model: "moonshotai/kimi-k2-instruct-0905", 
       messages: messages
     });
     return res.choices?.[0]?.message?.content;
