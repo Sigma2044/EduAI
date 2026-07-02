@@ -304,7 +304,8 @@ if (isVideoGeneration) {
     console.log(`🎬 Verbinde mit ZeroGPU Space ${spaceId}...`);
     
     const hfToken = process.env.HF_TOKEN; 
-    const client = await Client.connect(spaceId, hfToken ? { hf_token: hfToken } : {});
+    // Verbindung OHNE HF-Token zu einem permanent gesponserten/kostenlosen Space
+    const client = await Client.connect("linoyts/LTX-2-3-First-Last-Frame", {});
 
     // Optionale Bilder und Audio vorbereiten
     let firstImageBlob = null;
