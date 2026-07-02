@@ -8,7 +8,9 @@ import Groq from "groq-sdk";
 import pdfParse from "pdf-parse";
 import axios from "axios";
 import OpenAI from "openai";
-import { Client } from "@gradio/client"; // <-- Wichtig: Gradio Client für die Video-KI
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { Client } = require("@gradio/client"); 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
